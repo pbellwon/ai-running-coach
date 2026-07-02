@@ -1,38 +1,32 @@
 from fastapi import FastAPI
+from app.models.athlete import Athlete, AthleteProfile, AthletePhysiology
 
-app = FastAPI(
-    title="PaceMind API",
-    description="AI Running Coach API",
-    version="0.1.0",
-)
+app = FastAPI()
 
 
 @app.get("/")
 def root():
-    return {
-        "message": "Welcome to PaceMind API 🚀"
-    }
+    return {"message": "Welcome to PaceMind API 🚀"}
 
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok"
-    }
-
-from app.models.athlete import Athlete
+    return {"status": "ok"}
 
 
 @app.get("/athlete")
 def get_athlete():
-
     athlete = Athlete(
         id="1",
-        first_name="Paweł",
-        age=39,
-        height_cm=192,
-        weight_kg=77.8,
-        vo2max=55
+        profile=AthleteProfile(
+            first_name="Paweł",
+            age=39,
+            height_cm=192,
+            weight_kg=77.8
+        ),
+        physiology=AthletePhysiology(
+            vo2max=55
+        )
     )
 
-    return athlete
+    return athletesource .venv/bin/activate
