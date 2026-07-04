@@ -3,6 +3,9 @@ from app.models.athlete import Athlete, AthleteProfile, AthletePhysiology
 from app.db.database import Base, engine
 from app.db import models
 from app.services.fit_importer import FITImporter
+from app.analysis.statistics_engine import StatisticsEngine
+from app.analysis.training_load_engine import TrainingLoadEngine
+from app.analysis.efficiency_analyzer import EfficiencyAnalyzer
 
 app = FastAPI()
 
@@ -120,3 +123,69 @@ def test_fit():
 def decode_one_fit():
     importer = FITImporter("data/imports/trainingpeaks_fit")
     return importer.decode_one_file()
+
+@app.get("/stats/overview")
+def stats_overview():
+    engine = StatisticsEngine()
+    return engine.overview()
+
+@app.get("/stats/training-load-overview")
+def training_load_overview():
+    engine = StatisticsEngine()
+    return engine.training_load_overview()
+
+@app.get("/stats/weekly")
+def weekly_stats():
+    engine = StatisticsEngine()
+    return engine.weekly_overview()
+
+@app.get("/load/workout")
+def workout_load(workout_file: str):
+    engine = TrainingLoadEngine()
+    return engine.analyze_workout(workout_file)
+
+@app.get("/analysis/efficiency")
+def efficiency_analysis(workout_file: str):
+    analyzer = EfficiencyAnalyzer()
+    return analyzer.analyze(workout_file)
+
+@app.get("/debug/record")
+def debug_record(workout_file: str):
+    from app.db.database import SessionLocal
+    from app.db.models import RecordDB
+
+    db = SessionLocal()
+
+    record = (
+        db.query(RecordDB)
+        .filter(RecordDB.workout_file == workout_file)
+        .first()
+    )
+
+    db.close()
+
+    return record.__dict__ if record else {"error": "not found"}
+
+@app.get("/debug/fit-record")
+def debug_fit_record(workout_file: str):
+    from pathlib import Path
+    from app.services.fit_importer import FITImporter
+
+    importer = FITImporter("data/imports/trainingpeaks_fit")
+    file = Path("data/imports/trainingpeaks_fit") / workout_file
+
+    decoded = importer.decode_file(file)
+
+    return decoded["first_record"]
+
+@app.get("/debug/fit-records")
+def debug_fit_records(workout_file: str):
+    from pathlib import Path
+    from app.services.fit_importer import FITImporter
+
+    importer = FITImporter("data/imports/trainingpeaks_fit")
+    file = Path("data/imports/trainingpeaks_fit") / workout_file
+
+    decoded = importer.decode_file(file)
+
+    return decoded["records"][:10]

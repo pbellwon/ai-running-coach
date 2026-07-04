@@ -70,10 +70,10 @@ for file in files:
                     timestamp=record.get("timestamp"),
                     latitude=record.get("position_lat"),
                     longitude=record.get("position_long"),
-                    altitude=record.get("altitude"),
                     heart_rate=record.get("heart_rate"),
                     cadence=record.get("cadence"),
-                    speed=record.get("speed"),
+                    altitude=record.get("enhanced_altitude") or record.get("altitude"),
+                    speed=record.get("enhanced_speed") or record.get("speed"),
                 )
             )
             created_records += 1
