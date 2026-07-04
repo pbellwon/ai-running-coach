@@ -22,3 +22,42 @@ class WorkoutDB(Base):
 
     records_count = Column(Integer)
     laps_count = Column(Integer)
+
+class LapDB(Base):
+    __tablename__ = "laps"
+
+    id = Column(Integer, primary_key=True)
+
+    workout_file = Column(String, index=True)
+
+    lap_number = Column(Integer)
+
+    distance_m = Column(Float)
+
+    elapsed_time_sec = Column(Float)
+
+    avg_hr = Column(Float)
+
+    max_hr = Column(Float)
+
+
+class RecordDB(Base):
+    __tablename__ = "records"
+
+    id = Column(Integer, primary_key=True)
+
+    workout_file = Column(String, index=True)
+
+    timestamp = Column(DateTime)
+
+    latitude = Column(Float)
+
+    longitude = Column(Float)
+
+    altitude = Column(Float)
+
+    heart_rate = Column(Float)
+
+    cadence = Column(Float)
+
+    speed = Column(Float)
