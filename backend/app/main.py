@@ -6,6 +6,8 @@ from app.services.fit_importer import FITImporter
 from app.analysis.statistics_engine import StatisticsEngine
 from app.analysis.training_load_engine import TrainingLoadEngine
 from app.analysis.efficiency_analyzer import EfficiencyAnalyzer
+from app.analysis.cardiac_drift_analyzer import CardiacDriftAnalyzer
+from app.analysis.pace_stability_analyzer import PaceStabilityAnalyzer
 
 app = FastAPI()
 
@@ -189,3 +191,13 @@ def debug_fit_records(workout_file: str):
     decoded = importer.decode_file(file)
 
     return decoded["records"][:10]
+
+@app.get("/analysis/cardiac-drift")
+def cardiac_drift(workout_file: str):
+    analyzer = CardiacDriftAnalyzer()
+    return analyzer.analyze(workout_file)
+
+@app.get("/analysis/pace-stability")
+def pace_stability(workout_file: str):
+    analyzer = PaceStabilityAnalyzer()
+    return analyzer.analyze(workout_file)
