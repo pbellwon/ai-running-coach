@@ -8,6 +8,7 @@ from app.analysis.training_load_engine import TrainingLoadEngine
 from app.analysis.efficiency_analyzer import EfficiencyAnalyzer
 from app.analysis.cardiac_drift_analyzer import CardiacDriftAnalyzer
 from app.analysis.pace_stability_analyzer import PaceStabilityAnalyzer
+from app.analysis.cadence_analyzer import CadenceAnalyzer
 
 app = FastAPI()
 
@@ -200,4 +201,9 @@ def cardiac_drift(workout_file: str):
 @app.get("/analysis/pace-stability")
 def pace_stability(workout_file: str):
     analyzer = PaceStabilityAnalyzer()
+    return analyzer.analyze(workout_file)
+
+@app.get("/analysis/cadence")
+def cadence_analysis(workout_file: str):
+    analyzer = CadenceAnalyzer()
     return analyzer.analyze(workout_file)

@@ -1,10 +1,7 @@
 class DataNormalizer:
     @staticmethod
     def normalize_running_cadence(cadence):
-        if cadence is None:
-            return None
-
-        if cadence == 0:
+        if cadence is None or cadence == 0:
             return None
 
         if cadence < 120:
@@ -13,17 +10,36 @@ class DataNormalizer:
         return cadence
 
     @staticmethod
-    def is_moving_record(speed, cadence):
+    def classify_activity_state(speed, cadence):
         if speed is None:
-            return False
+            return "unknown"
 
-        if speed < 1.5:
-            return False
+        if speed < 0.3:
+            return "standing"
 
-        if cadence is not None and cadence == 0:
-            return False
+        if speed < 1.8:
+            return "walking"
 
-        return True
+        cadence_norm = DataNormalizer.normalize_running_cadence(cadence)
+
+        if cadence_norm and cadence_norm >= 140:
+            return "running"
+
+        if speed >= 1.8:
+            return "running"
+
+        return "unknown"
+
+    @staticmethod
+    def is_moving_record(speed, cadence):
+        return DataNormalizer.classify_activity_state(speed, cadence) in {
+            "walking",
+            "running",
+        }
+
+    @staticmethod
+    def is_running_record(speed, cadence):
+        return DataNormalizer.classify_activity_state(speed, cadence) == "running"
 
     @staticmethod
     def pace_min_per_km(speed_mps):
