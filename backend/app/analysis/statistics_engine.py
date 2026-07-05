@@ -196,3 +196,117 @@ class StatisticsEngine:
             }
             for week_data in weeks.values()
         ]
+    
+    def total_workouts(self):
+        db = SessionLocal()
+        value = db.query(func.count(WorkoutDB.id)).scalar()
+        db.close()
+        return value or 0
+
+    def total_distance_km(self):
+        db = SessionLocal()
+        value = db.query(func.sum(WorkoutDB.distance_km)).scalar()
+        db.close()
+        return round(value or 0, 1)
+
+    def running_workouts(self):
+        db = SessionLocal()
+        value = (
+            db.query(func.count(WorkoutDB.id))
+            .filter(WorkoutDB.sport == "running")
+            .scalar()
+        )
+        db.close()
+        return value or 0
+
+    def running_distance_km(self):
+        db = SessionLocal()
+        value = (
+            db.query(func.sum(WorkoutDB.distance_km))
+            .filter(WorkoutDB.sport == "running")
+            .scalar()
+        )
+        db.close()
+        return round(value or 0, 1)
+
+    def longest_run_km(self):
+        db = SessionLocal()
+        value = (
+            db.query(func.max(WorkoutDB.distance_km))
+            .filter(WorkoutDB.sport == "running")
+            .scalar()
+        )
+        db.close()
+        return round(value or 0, 1)
+
+    def average_long_run_km(self):
+        db = SessionLocal()
+        value = (
+            db.query(func.avg(WorkoutDB.distance_km))
+            .filter(
+                WorkoutDB.sport == "running",
+                WorkoutDB.distance_km >= 18,
+            )
+            .scalar()
+        )
+        db.close()
+        return round(value or 0, 1)
+
+    def training_days_per_week(self):
+        db = SessionLocal()
+
+        total_workouts = db.query(func.count(WorkoutDB.id)).scalar() or 0
+
+        first = db.query(func.min(WorkoutDB.start_time)).scalar()
+        last = db.query(func.max(WorkoutDB.start_time)).scalar()
+
+        db.close()
+
+        if not first or not last:
+            return 0
+
+        weeks = max((last - first).days / 7, 1)
+
+        return round(total_workouts / weeks, 1)
+    
+    def running_hours(self):
+        db = SessionLocal()
+        value = (
+            db.query(func.sum(WorkoutDB.duration_sec))
+            .filter(WorkoutDB.sport == "running")
+            .scalar()
+        )
+        db.close()
+        return round((value or 0) / 3600, 1)
+
+    def cross_training_hours(self):
+        db = SessionLocal()
+        value = (
+            db.query(func.sum(WorkoutDB.duration_sec))
+            .filter(
+                WorkoutDB.sport.in_([
+                    "cycling",
+                    "swimming",
+                    "hiking",
+                    "walking",
+                ])
+            )
+            .scalar()
+        )
+        db.close()
+        return round((value or 0) / 3600, 1)
+
+    def strength_hours(self):
+        db = SessionLocal()
+        value = (
+            db.query(func.sum(WorkoutDB.duration_sec))
+            .filter(
+                WorkoutDB.sport.in_([
+                    "training",
+                    "fitness_equipment",
+                ])
+            )
+            .scalar()
+        )
+        db.close()
+        return round((value or 0) / 3600, 1)

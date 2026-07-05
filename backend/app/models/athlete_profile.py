@@ -9,14 +9,22 @@ class AthleteProfile:
 
     total_distance_km: float
 
+    running_workouts: int
+
+    running_distance_km: float
+
+    running_hours: float
+
+    cross_training_hours: float
+
+    strength_hours: float
+
     average_weekly_distance_km: float
 
     longest_run_km: float
 
-    average_long_run_km: float
-
-    training_days_per_week: float
-
+    training_sessions_per_week: float
+    
     max_hr: int
 
     threshold_hr: Optional[int]
