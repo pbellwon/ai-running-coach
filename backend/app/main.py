@@ -9,6 +9,12 @@ from app.analysis.efficiency_analyzer import EfficiencyAnalyzer
 from app.analysis.cardiac_drift_analyzer import CardiacDriftAnalyzer
 from app.analysis.pace_stability_analyzer import PaceStabilityAnalyzer
 from app.analysis.cadence_analyzer import CadenceAnalyzer
+from datetime import date
+from app.models.goal import Goal
+from app.engine.goal_engine import GoalEngine
+from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
+from app.engine.goal_feasibility import GoalFeasibility
+
 
 app = FastAPI()
 
@@ -207,3 +213,58 @@ def pace_stability(workout_file: str):
 def cadence_analysis(workout_file: str):
     analyzer = CadenceAnalyzer()
     return analyzer.analyze(workout_file)
+
+@app.get("/goal/test")
+def goal_test():
+    goal = Goal(
+        goal_type="race_time",
+        distance_km=10,
+        target_time_sec=2320,  # 38:40
+        target_date=date(2026, 10, 1),
+        priority="A",
+        notes="Break 39 minutes for 10K and target around 38:40.",
+    )
+
+    engine = GoalEngine()
+
+    return engine.evaluate(goal)
+
+@app.get("/goal/gap-test")
+def goal_gap_test():
+
+    goal = Goal(
+        goal_type="race_time",
+        distance_km=10,
+        target_time_sec=2320,
+        target_date=date(2026, 10, 1),
+        priority="A",
+    )
+
+    athlete = {
+        "weekly_distance_km": 42,
+        "long_run_km": 14,
+        "threshold_pace": None,
+        "easy_pace": 5.15,
+    }
+
+    analyzer = AthleteGapAnalyzer()
+
+    return analyzer.analyze(goal, athlete)
+
+@app.get("/goal/feasibility")
+def goal_feasibility():
+
+    goal = Goal(
+        goal_type="race_time",
+        distance_km=10,
+        target_time_sec=2320,
+        target_date=date(2026, 10, 1),
+        priority="A",
+    )
+
+    engine = GoalEngine()
+    summary = engine.evaluate(goal)
+
+    feasibility = GoalFeasibility()
+
+    return feasibility.evaluate(summary)
