@@ -14,6 +14,10 @@ from app.models.goal import Goal
 from app.engine.goal_engine import GoalEngine
 from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
 from app.engine.goal_feasibility import GoalFeasibility
+from app.engine.athlete_profile_builder import AthleteProfileBuilder
+from dataclasses import asdict
+from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
+from app.engine.athlete_profile_builder import AthleteProfileBuilder
 
 
 app = FastAPI()
@@ -268,3 +272,36 @@ def goal_feasibility():
     feasibility = GoalFeasibility()
 
     return feasibility.evaluate(summary)
+
+@app.get("/athlete/profile")
+def athlete_profile():
+
+    profile = AthleteProfileBuilder().build()
+
+    return asdict(profile)
+
+@app.get("/athlete/gaps")
+def athlete_gaps():
+
+    goal = Goal(
+        goal_type="race_time",
+        distance_km=10,
+        target_time_sec=2320,
+        target_date=date(2026, 10, 1),
+        priority="A",
+    )
+
+    athlete = AthleteProfileBuilder().build()
+
+    gaps = AthleteGapAnalyzer().analyze(goal, athlete)
+
+    return [
+        {
+            "area": gap.area,
+            "current_score": gap.current_score,
+            "target_score": gap.target_score,
+            "gap": gap.gap,
+            "reason": gap.reason,
+        }
+        for gap in gaps
+    ]

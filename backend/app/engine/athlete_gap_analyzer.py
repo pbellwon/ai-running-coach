@@ -1,47 +1,72 @@
+from app.engine.scores.aerobic_score import AerobicScoreCalculator
+from app.engine.scores.strength_score import StrengthScoreCalculator
+
 from app.models.goal import Goal
+from app.models.gap import Gap
+from app.models.athlete_profile import AthleteProfile
 
 
 class AthleteGapAnalyzer:
 
-    def analyze(self, goal: Goal, athlete_profile: dict):
+    def __init__(self):
+        self.aerobic = AerobicScoreCalculator()
+        self.strength = StrengthScoreCalculator()
+
+    def analyze(
+        self,
+        goal: Goal,
+        athlete: AthleteProfile,
+    ) -> list[Gap]:
 
         gaps = []
 
-        weekly_distance = athlete_profile.get("weekly_distance_km", 0)
-        long_run = athlete_profile.get("long_run_km", 0)
-        threshold_pace = athlete_profile.get("threshold_pace")
-        easy_pace = athlete_profile.get("easy_pace")
+        aerobic = self._aerobic_gap(goal, athlete)
+        if aerobic:
+            gaps.append(aerobic)
 
-        if goal.distance_km == 10:
+        strength = self._strength_gap(goal, athlete)
+        if strength:
+            gaps.append(strength)
 
-            if weekly_distance < 50:
-                gaps.append({
-                    "area": "aerobic_endurance",
-                    "priority": 1,
-                    "reason": "Weekly volume below recommended range."
-                })
-
-            if long_run < 16:
-                gaps.append({
-                    "area": "long_run",
-                    "priority": 2,
-                    "reason": "Long run shorter than recommended."
-                })
-
-            if threshold_pace is None:
-                gaps.append({
-                    "area": "threshold",
-                    "priority": 3,
-                    "reason": "Threshold pace not established."
-                })
-
-            if easy_pace is None:
-                gaps.append({
-                    "area": "running_economy",
-                    "priority": 4,
-                    "reason": "Easy pace profile unavailable."
-                })
-
-        gaps.sort(key=lambda g: g["priority"])
+        gaps.sort(key=lambda g: g.gap, reverse=True)
 
         return gaps
+
+    def _aerobic_gap(self, goal, athlete):
+
+        score = self.aerobic.calculate(athlete)
+
+        target = self._target_aerobic_score(goal)
+
+        return Gap(
+            area="aerobic_endurance",
+            current_score=score,
+            target_score=target,
+            reason="Current aerobic base compared to goal requirements.",
+        )
+
+    def _strength_gap(self, goal, athlete):
+
+        score = self.strength.calculate(athlete)
+
+        target = 70
+
+        return Gap(
+            area="strength",
+            current_score=score,
+            target_score=target,
+            reason="Current strength support compared to goal requirements.",
+        )
+
+    def _target_aerobic_score(self, goal):
+
+        if goal.distance_km <= 5:
+            return 70
+
+        if goal.distance_km <= 10:
+            return 80
+
+        if goal.distance_km <= 21.1:
+            return 90
+
+        return 95
