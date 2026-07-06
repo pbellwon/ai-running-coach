@@ -18,6 +18,7 @@ from app.engine.athlete_profile_builder import AthleteProfileBuilder
 from dataclasses import asdict
 from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
 from app.engine.athlete_profile_builder import AthleteProfileBuilder
+from app.analysis.current_fitness_engine import CurrentFitnessEngine
 
 
 app = FastAPI()
@@ -305,3 +306,10 @@ def athlete_gaps():
         }
         for gap in gaps
     ]
+
+@app.get("/athlete/current-fitness")
+def athlete_current_fitness():
+
+    fitness = CurrentFitnessEngine().build()
+
+    return asdict(fitness)
