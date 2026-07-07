@@ -238,8 +238,17 @@ def athlete_gaps():
     )
 
     athlete = AthleteProfileBuilder().build()
+    current = CurrentFitnessEngine().build()
 
-    gaps = AthleteGapAnalyzer().analyze(goal, athlete)
+    capabilities = CapabilityEngine().analyze(
+        athlete=athlete,
+        current=current,
+    )
+
+    gaps = AthleteGapAnalyzer().analyze(
+        goal=goal,
+        capabilities=capabilities,
+    )
 
     return [
         {
