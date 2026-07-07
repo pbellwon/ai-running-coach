@@ -19,6 +19,8 @@ from dataclasses import asdict
 from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
 from app.engine.athlete_profile_builder import AthleteProfileBuilder
 from app.analysis.current_fitness_engine import CurrentFitnessEngine
+from app.engine.capability_engine import CapabilityEngine
+from app.analysis.current_fitness_engine import CurrentFitnessEngine
 
 
 app = FastAPI()
@@ -257,3 +259,23 @@ def athlete_current_fitness():
 
     return asdict(fitness)
 
+@app.get("/athlete/capabilities")
+def athlete_capabilities():
+
+    athlete = AthleteProfileBuilder().build()
+    current = CurrentFitnessEngine().build()
+
+    capabilities = CapabilityEngine().analyze(
+        athlete=athlete,
+        current=current,
+    )
+
+    return [
+        {
+            "area": capability.area,
+            "score": capability.score,
+            "confidence": capability.confidence,
+            "evidence": capability.evidence,
+        }
+        for capability in capabilities
+    ]
