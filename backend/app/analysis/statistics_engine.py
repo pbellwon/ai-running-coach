@@ -3,6 +3,7 @@ from sqlalchemy import extract
 from app.db.database import SessionLocal
 from app.db.models import WorkoutDB
 from app.analysis.sport_classifier import SportClassifier
+from datetime import datetime, timedelta
 
 
 class StatisticsEngine:
@@ -310,3 +311,19 @@ class StatisticsEngine:
         )
         db.close()
         return round((value or 0) / 3600, 1)
+    
+    def _workouts_query(self, last_weeks=None):
+
+        db = SessionLocal()
+
+        query = db.query(WorkoutDB)
+
+        if last_weeks is not None:
+
+            cutoff = datetime.utcnow() - timedelta(weeks=last_weeks)
+
+            query = query.filter(
+                WorkoutDB.start_time >= cutoff
+            )
+
+        return db, query

@@ -53,63 +53,6 @@ def get_athlete():
 
     return athlete
 
-from app.services.csv_importer import CSVWorkoutImporter
-
-
-@app.get("/workouts/raw")
-def get_raw_workouts():
-
-    importer = CSVWorkoutImporter(
-        "data/imports/workouts_sample.csv"
-    )
-
-    return importer.load_workouts()
-
-from app.engine.training_metrics import TrainingMetricsEngine
-from app.services.csv_importer import CSVWorkoutImporter
-
-
-@app.get("/workouts/analyzed")
-def analyze_workouts():
-
-    importer = CSVWorkoutImporter("data/imports/workouts_sample.csv")
-    workouts = importer.load_workouts()
-
-    engine = TrainingMetricsEngine()
-
-    return [
-        engine.analyze(w)
-        for w in workouts
-    ]
-
-from app.engine.training_metrics import TrainingMetricsEngine
-from app.engine.coach_engine import CoachEngine
-from app.services.csv_importer import CSVWorkoutImporter
-
-
-@app.get("/coach/summary")
-def coach_summary():
-
-    importer = CSVWorkoutImporter("data/imports/workouts_sample.csv")
-    workouts = importer.load_workouts()
-
-    metrics_engine = TrainingMetricsEngine()
-    coach_engine = CoachEngine()
-
-    results = []
-
-    for w in workouts:
-        metrics = metrics_engine.analyze(w)
-        decision = coach_engine.make_recommendation(metrics)
-
-        results.append({
-            "workout": metrics,
-            "coach": decision
-        })
-
-    return results
-
-
 from pathlib import Path
 from fitparse import FitFile
 import gzip
@@ -313,3 +256,4 @@ def athlete_current_fitness():
     fitness = CurrentFitnessEngine().build()
 
     return asdict(fitness)
+
