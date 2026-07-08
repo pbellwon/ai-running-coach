@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -9,7 +8,11 @@ class WorkoutIntent:
 
     primary_capability: str
 
-    secondary_capability: Optional[str]
+    secondary_capabilities: list[str]
+
+    modifiers: list[str]
+
+    components: list[dict]
 
     expected_intensity: str
 
