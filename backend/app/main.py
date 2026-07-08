@@ -21,6 +21,7 @@ from app.engine.athlete_profile_builder import AthleteProfileBuilder
 from app.analysis.current_fitness_engine import CurrentFitnessEngine
 from app.engine.capability_engine import CapabilityEngine
 from app.analysis.current_fitness_engine import CurrentFitnessEngine
+from app.engine.workout_intent_engine import WorkoutIntentEngine
 
 
 app = FastAPI()
@@ -288,3 +289,17 @@ def athlete_capabilities():
         }
         for capability in capabilities
     ]
+
+@app.get("/workout/intent-test")
+def workout_intent_test(workout_type: str = "threshold"):
+
+    intent = WorkoutIntentEngine().classify(workout_type)
+
+    return asdict(intent)
+
+@app.get("/workout/intents")
+def workout_intents():
+
+    return {
+        "supported_workout_types": WorkoutIntentEngine().supported_types()
+    }
