@@ -303,3 +303,10 @@ def workout_intents():
     return {
         "supported_workout_types": WorkoutIntentEngine().supported_types()
     }
+
+@app.get("/workout/intent-from-description")
+def workout_intent_from_description(description: str):
+
+    intent = WorkoutIntentEngine().classify_from_description(description)
+
+    return asdict(intent)

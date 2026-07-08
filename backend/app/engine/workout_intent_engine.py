@@ -236,6 +236,124 @@ class WorkoutIntentEngine:
             success_metrics=[],
             description="Unknown workout type.",
         )
+    
+    def classify_from_description(self, description: str) -> WorkoutIntent:
+
+        text = description.strip().lower()
+
+        has_threshold = any(
+            keyword in text
+            for keyword in [
+                "threshold",
+                "treshold",
+                "prog",
+                "tempo progowe",
+                "3x3",
+                "2x4",
+                "4x2",
+            ]
+        )
+
+        has_vo2max = any(
+            keyword in text
+            for keyword in [
+                "vo2",
+                "vo2max",
+                "200",
+                "300",
+                "400",
+                "interval",
+                "interwał",
+                "interwaly",
+                "interwały",
+            ]
+        )
+
+        has_easy = any(
+            keyword in text
+            for keyword in [
+                "easy",
+                "easy run",
+                "spokojny",
+                "luźny",
+                "luźno",
+            ]
+        )
+
+        has_long_run = any(
+            keyword in text
+            for keyword in [
+                "long",
+                "long run",
+                "długi",
+                "dlugi",
+                "wybieganie",
+            ]
+        )
+
+        has_strides = any(
+            keyword in text
+            for keyword in [
+                "strides",
+                "rytmy",
+                "przebieżki",
+                "przebiezki",
+            ]
+        )
+
+        has_hills = any(
+            keyword in text
+            for keyword in [
+                "hills",
+                "hill",
+                "podbiegi",
+                "górki",
+                "gorki",
+            ]
+        )
+
+        has_progression = any(
+            keyword in text
+            for keyword in [
+                "progression",
+                "narastająco",
+                "narastajace",
+                "bnp",
+                "narastajacy",
+                "fast finish",
+                "szybka końcówka",
+                "szybka koncowka",
+            ]
+        )
+
+        if has_threshold and has_vo2max:
+            return self.classify("threshold+vo2max")
+
+        if has_long_run and has_progression:
+            return self.classify("long_run+progression")
+
+        if has_easy and has_hills:
+            return self.classify("easy_run+hills")
+
+        if has_easy and has_strides:
+            return self.classify("easy_run+strides")
+
+        if has_threshold:
+            return self.classify("threshold")
+
+        if "tempo" in text:
+            return self.classify("tempo_run")
+
+        if has_long_run:
+            return self.classify("long_run")
+
+        if has_easy:
+            return self.classify("easy_run")
+
+        if has_vo2max:
+            return self.classify("vo2max")
+
+        return self.classify("unknown")
 
     def supported_types(self) -> list[str]:
 
