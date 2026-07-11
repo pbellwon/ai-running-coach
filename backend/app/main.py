@@ -318,3 +318,25 @@ def planned_workout_test():
     workout = PlannedWorkoutEngine().build_test_workout()
 
     return asdict(workout)
+
+
+@app.get("/plan/build-workout")
+def build_planned_workout(
+    planned_date: date,
+    title: str,
+    description: str,
+    planned_distance_km: float | None = None,
+    planned_duration_min: int | None = None,
+    priority: str = "normal",
+):
+
+    workout = PlannedWorkoutEngine().build(
+        planned_date=planned_date,
+        title=title,
+        description=description,
+        planned_distance_km=planned_distance_km,
+        planned_duration_min=planned_duration_min,
+        priority=priority,
+    )
+
+    return asdict(workout)
