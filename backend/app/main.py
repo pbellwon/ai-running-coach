@@ -23,7 +23,7 @@ from app.engine.capability_engine import CapabilityEngine
 from app.analysis.current_fitness_engine import CurrentFitnessEngine
 from app.engine.workout_intent_engine import WorkoutIntentEngine
 from app.engine.planned_workout_engine import PlannedWorkoutEngine
-
+from app.engine.planned_workout_validator import PlannedWorkoutValidator
 
 app = FastAPI()
 
@@ -340,3 +340,29 @@ def build_planned_workout(
     )
 
     return asdict(workout)
+
+@app.get("/plan/validate-workout")
+def validate_planned_workout(
+    planned_date: date,
+    title: str,
+    description: str,
+    planned_distance_km: float | None = None,
+    planned_duration_min: int | None = None,
+    priority: str = "normal",
+):
+
+    workout = PlannedWorkoutEngine().build(
+        planned_date=planned_date,
+        title=title,
+        description=description,
+        planned_distance_km=planned_distance_km,
+        planned_duration_min=planned_duration_min,
+        priority=priority,
+    )
+
+    validation = PlannedWorkoutValidator().validate(workout)
+
+    return {
+        "workout": asdict(workout),
+        "validation": validation,
+    }
