@@ -22,6 +22,7 @@ from app.analysis.current_fitness_engine import CurrentFitnessEngine
 from app.engine.capability_engine import CapabilityEngine
 from app.analysis.current_fitness_engine import CurrentFitnessEngine
 from app.engine.workout_intent_engine import WorkoutIntentEngine
+from app.engine.planned_workout_engine import PlannedWorkoutEngine
 
 
 app = FastAPI()
@@ -310,3 +311,10 @@ def workout_intent_from_description(description: str):
     intent = WorkoutIntentEngine().classify_from_description(description)
 
     return asdict(intent)
+
+@app.get("/plan/workout-test")
+def planned_workout_test():
+
+    workout = PlannedWorkoutEngine().build_test_workout()
+
+    return asdict(workout)
