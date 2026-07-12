@@ -105,7 +105,7 @@ class WorkoutStructureParser:
                         "description": f"{repetitions} x {distance_m} m fast",
                         "repetitions": int(repetitions),
                         "distance_m": distance_m,
-                        "intensity": "vo2max",
+                        "intensity": "strides" if "strides" in text or "rytmy" in text or "przebieżki" in text or "przebiezki" in text else "vo2max",
                     }
                 )
 
