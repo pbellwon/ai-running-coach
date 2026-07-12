@@ -9,16 +9,59 @@ class WorkoutStructureParser:
 
         structure = []
 
-        threshold_blocks = self._find_threshold_blocks(text)
-        fast_blocks = self._find_fast_blocks(text)
-
-        for block in threshold_blocks:
-            structure.append(block)
-
-        for block in fast_blocks:
-            structure.append(block)
+        structure.extend(self._find_long_run(text))
+        structure.extend(self._find_easy_distance(text))
+        structure.extend(self._find_threshold_blocks(text))
+        structure.extend(self._find_fast_blocks(text))
+        structure.extend(self._find_strides(text))
+        structure.extend(self._find_hills(text))
+        structure.extend(self._find_progression(text))
 
         return structure
+
+    def _find_long_run(self, text: str) -> list[dict]:
+
+        blocks = []
+
+        pattern = r"(?:long run|long|długi|dlugi|wybieganie)\s*(\d+(?:\.\d+)?)\s*km"
+
+        matches = re.findall(pattern, text)
+
+        for distance_km in matches:
+            distance_km = float(distance_km)
+
+            blocks.append(
+                {
+                    "segment": "main",
+                    "description": f"Long run {distance_km:g} km",
+                    "distance_km": distance_km,
+                    "intensity": "easy_to_moderate",
+                }
+            )
+
+        return blocks
+
+    def _find_easy_distance(self, text: str) -> list[dict]:
+
+        blocks = []
+
+        pattern = r"(?:easy|easy run|spokojny|luźny|luzny|luźno|luzno)\s*(\d+(?:\.\d+)?)\s*km"
+
+        matches = re.findall(pattern, text)
+
+        for distance_km in matches:
+            distance_km = float(distance_km)
+
+            blocks.append(
+                {
+                    "segment": "main",
+                    "description": f"Easy {distance_km:g} km",
+                    "distance_km": distance_km,
+                    "intensity": "easy",
+                }
+            )
+
+        return blocks
 
     def _find_threshold_blocks(self, text: str) -> list[dict]:
 
@@ -67,3 +110,72 @@ class WorkoutStructureParser:
                 )
 
         return blocks
+
+    def _find_strides(self, text: str) -> list[dict]:
+
+        blocks = []
+
+        pattern = r"(\d+)\s*x\s*(\d+)\s*s\s*(?:strides|rytmy|przebieżki|przebiezki)?"
+
+        matches = re.findall(pattern, text)
+
+        for repetitions, duration_sec in matches:
+            duration_sec = int(duration_sec)
+
+            if duration_sec <= 40:
+                blocks.append(
+                    {
+                        "segment": "secondary",
+                        "description": f"{repetitions} x {duration_sec} s strides",
+                        "repetitions": int(repetitions),
+                        "duration_sec": duration_sec,
+                        "intensity": "strides",
+                    }
+                )
+
+        return blocks
+
+    def _find_hills(self, text: str) -> list[dict]:
+
+        blocks = []
+
+        pattern = r"(\d+)\s*x\s*(\d+)\s*s\s*(?:hills|hill|podbiegi|górki|gorki)"
+
+        matches = re.findall(pattern, text)
+
+        for repetitions, duration_sec in matches:
+            duration_sec = int(duration_sec)
+
+            blocks.append(
+                {
+                    "segment": "secondary",
+                    "description": f"{repetitions} x {duration_sec} s hills",
+                    "repetitions": int(repetitions),
+                    "duration_sec": duration_sec,
+                    "intensity": "hills",
+                }
+            )
+
+        return blocks
+
+    def _find_progression(self, text: str) -> list[dict]:
+
+        keywords = [
+            "progression",
+            "fast finish",
+            "szybka końcówka",
+            "szybka koncowka",
+            "narastająco",
+            "narastajaco",
+        ]
+
+        if any(keyword in text for keyword in keywords):
+            return [
+                {
+                    "segment": "finish",
+                    "description": "Fast finish / progression",
+                    "intensity": "progression",
+                }
+            ]
+
+        return []
