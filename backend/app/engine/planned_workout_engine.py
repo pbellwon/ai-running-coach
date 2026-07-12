@@ -3,6 +3,7 @@ from typing import Optional
 
 from app.engine.workout_intent_engine import WorkoutIntentEngine
 from app.models.planned_workout import PlannedWorkout
+from app.engine.workout_structure_parser import WorkoutStructureParser
 
 
 class PlannedWorkoutEngine:
@@ -28,7 +29,7 @@ class PlannedWorkoutEngine:
             intent=intent,
             planned_distance_km=planned_distance_km,
             planned_duration_min=planned_duration_min,
-            structure=structure or [],
+            structure=structure or WorkoutStructureParser().parse(description),
             priority=priority,
         )
 

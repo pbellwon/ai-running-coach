@@ -24,6 +24,7 @@ from app.analysis.current_fitness_engine import CurrentFitnessEngine
 from app.engine.workout_intent_engine import WorkoutIntentEngine
 from app.engine.planned_workout_engine import PlannedWorkoutEngine
 from app.engine.planned_workout_validator import PlannedWorkoutValidator
+from app.engine.workout_structure_parser import WorkoutStructureParser
 
 app = FastAPI()
 
@@ -365,4 +366,12 @@ def validate_planned_workout(
     return {
         "workout": asdict(workout),
         "validation": validation,
+    }
+
+@app.get("/workout/structure-test")
+def workout_structure_test(description: str):
+
+    return {
+        "description": description,
+        "structure": WorkoutStructureParser().parse(description),
     }
