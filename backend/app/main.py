@@ -25,6 +25,7 @@ from app.engine.workout_intent_engine import WorkoutIntentEngine
 from app.engine.planned_workout_engine import PlannedWorkoutEngine
 from app.engine.planned_workout_validator import PlannedWorkoutValidator
 from app.engine.workout_structure_parser import WorkoutStructureParser
+from app.analysis.executed_workout_structure_analyzer import ExecutedWorkoutStructureAnalyzer
 
 app = FastAPI()
 
@@ -375,3 +376,8 @@ def workout_structure_test(description: str):
         "description": description,
         "structure": WorkoutStructureParser().parse(description),
     }
+
+@app.get("/analysis/executed-structure")
+def executed_workout_structure(workout_file: str):
+
+    return ExecutedWorkoutStructureAnalyzer().analyze(workout_file)
