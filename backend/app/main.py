@@ -409,3 +409,36 @@ def compare_planned_workout(
     )
 
     return asdict(comparison)
+
+@app.get("/plan/compare-workout-debug")
+def compare_planned_workout_debug(
+    planned_date: date,
+    title: str,
+    description: str,
+    workout_file: str,
+    planned_distance_km: float | None = None,
+    planned_duration_min: int | None = None,
+    priority: str = "normal",
+):
+
+    planned = PlannedWorkoutEngine().build(
+        planned_date=planned_date,
+        title=title,
+        description=description,
+        planned_distance_km=planned_distance_km,
+        planned_duration_min=planned_duration_min,
+        priority=priority,
+    )
+
+    executed_structure = ExecutedWorkoutStructureAnalyzer().analyze(workout_file)
+
+    comparison = PlanVsExecutionEngine().compare(
+        planned=planned,
+        workout_file=workout_file,
+    )
+
+    return {
+        "planned": asdict(planned),
+        "executed_structure": executed_structure,
+        "comparison": asdict(comparison),
+    }
