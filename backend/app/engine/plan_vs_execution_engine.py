@@ -48,6 +48,14 @@ class PlanVsExecutionEngine:
             confidence=confidence,
         )
 
+        recommendation = self._recommendation(
+            execution_quality=execution_quality,
+            confidence=confidence,
+            intent_match=intent_match,
+            distance_match=distance_match,
+            structure_match=structure_match,
+        )
+
         return WorkoutExecutionComparison(
             planned_workout_type=planned_type,
             executed_workout_type=executed_type,
@@ -59,6 +67,8 @@ class PlanVsExecutionEngine:
             execution_quality=execution_quality,
             confidence=confidence,
             classification_method=classification_method,
+            recommendation=recommendation["recommendation"],
+            recommendation_reason=recommendation["reason"],
             warnings=warnings,
         )
 
@@ -161,3 +171,53 @@ class PlanVsExecutionEngine:
             return "acceptable"
 
         return "poor"
+
+    def _recommendation(
+        self,
+        execution_quality: str,
+        confidence: float,
+        intent_match: bool,
+        distance_match: str,
+        structure_match: str,
+    ) -> dict:
+
+        if confidence < 0.5:
+            return {
+                "recommendation": "review_manually",
+                "reason": "Execution classification confidence is low.",
+            }
+
+        if execution_quality == "good":
+            return {
+                "recommendation": "continue_plan",
+                "reason": "Workout matched the plan well.",
+            }
+
+        if execution_quality == "acceptable":
+            return {
+                "recommendation": "continue_plan_with_note",
+                "reason": "Workout mostly matched the plan, with minor differences.",
+            }
+
+        if not intent_match:
+            return {
+                "recommendation": "review_manually",
+                "reason": "Executed workout intent did not match planned intent.",
+            }
+
+        if distance_match == "major_difference":
+            return {
+                "recommendation": "adjust_next_workout",
+                "reason": "Executed distance differed significantly from planned distance.",
+            }
+
+        if structure_match == "mismatch":
+            return {
+                "recommendation": "review_manually",
+                "reason": "Executed workout structure did not match planned structure.",
+            }
+
+        return {
+            "recommendation": "review_manually",
+            "reason": "Workout execution requires manual review.",
+        }

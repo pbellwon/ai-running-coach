@@ -24,4 +24,8 @@ class WorkoutExecutionComparison:
 
     classification_method: str
 
+    recommendation: str
+
+    recommendation_reason: str
+
     warnings: list[str]
