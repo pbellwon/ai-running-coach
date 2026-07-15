@@ -19,6 +19,11 @@ class PlanVsExecutionEngine:
         planned_type = planned.workout_type
         executed_type = executed_structure["summary"]["detected_type"]
 
+        confidence = executed_structure["summary"].get("confidence", 0)
+        classification_method = executed_structure["summary"].get(
+            "classification_method",
+            "unknown",
+        )
         warnings = list(executed_structure["summary"].get("warnings", []))
 
         intent_match = self._intent_match(planned_type, executed_type)
@@ -40,7 +45,7 @@ class PlanVsExecutionEngine:
             intent_match=intent_match,
             distance_match=distance_match,
             structure_match=structure_match,
-            confidence=executed_structure["summary"].get("confidence", 0),
+            confidence=confidence,
         )
 
         return WorkoutExecutionComparison(
@@ -52,6 +57,8 @@ class PlanVsExecutionEngine:
             distance_match=distance_match,
             structure_match=structure_match,
             execution_quality=execution_quality,
+            confidence=confidence,
+            classification_method=classification_method,
             warnings=warnings,
         )
 

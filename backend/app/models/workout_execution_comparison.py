@@ -20,4 +20,8 @@ class WorkoutExecutionComparison:
 
     execution_quality: str
 
+    confidence: float
+
+    classification_method: str
+
     warnings: list[str]
