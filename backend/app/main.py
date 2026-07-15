@@ -26,6 +26,7 @@ from app.engine.planned_workout_engine import PlannedWorkoutEngine
 from app.engine.planned_workout_validator import PlannedWorkoutValidator
 from app.engine.workout_structure_parser import WorkoutStructureParser
 from app.analysis.executed_workout_structure_analyzer import ExecutedWorkoutStructureAnalyzer
+from app.engine.plan_vs_execution_engine import PlanVsExecutionEngine
 
 app = FastAPI()
 
@@ -381,3 +382,30 @@ def workout_structure_test(description: str):
 def executed_workout_structure(workout_file: str):
 
     return ExecutedWorkoutStructureAnalyzer().analyze(workout_file)
+
+@app.get("/plan/compare-workout")
+def compare_planned_workout(
+    planned_date: date,
+    title: str,
+    description: str,
+    workout_file: str,
+    planned_distance_km: float | None = None,
+    planned_duration_min: int | None = None,
+    priority: str = "normal",
+):
+
+    planned = PlannedWorkoutEngine().build(
+        planned_date=planned_date,
+        title=title,
+        description=description,
+        planned_distance_km=planned_distance_km,
+        planned_duration_min=planned_duration_min,
+        priority=priority,
+    )
+
+    comparison = PlanVsExecutionEngine().compare(
+        planned=planned,
+        workout_file=workout_file,
+    )
+
+    return asdict(comparison)

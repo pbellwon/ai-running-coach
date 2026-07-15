@@ -96,6 +96,7 @@ class ExecutedWorkoutStructureAnalyzer:
                 self._build_distance_segment(
                     segment="easy_block",
                     laps=easy_laps,
+                    intensity="easy",
                 )
             )
 
