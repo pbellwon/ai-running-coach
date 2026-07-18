@@ -27,6 +27,7 @@ from app.engine.planned_workout_validator import PlannedWorkoutValidator
 from app.engine.workout_structure_parser import WorkoutStructureParser
 from app.analysis.executed_workout_structure_analyzer import ExecutedWorkoutStructureAnalyzer
 from app.engine.plan_vs_execution_engine import PlanVsExecutionEngine
+from app.engine.adaptive_feedback_engine import AdaptiveFeedbackEngine
 
 app = FastAPI()
 
@@ -441,4 +442,36 @@ def compare_planned_workout_debug(
         "planned": asdict(planned),
         "executed_structure": executed_structure,
         "comparison": asdict(comparison),
+    }
+
+@app.get("/coach/adaptive-feedback")
+def adaptive_feedback(
+    planned_date: date,
+    title: str,
+    description: str,
+    workout_file: str,
+    planned_distance_km: float | None = None,
+    planned_duration_min: int | None = None,
+    priority: str = "normal",
+):
+
+    planned = PlannedWorkoutEngine().build(
+        planned_date=planned_date,
+        title=title,
+        description=description,
+        planned_distance_km=planned_distance_km,
+        planned_duration_min=planned_duration_min,
+        priority=priority,
+    )
+
+    comparison = PlanVsExecutionEngine().compare(
+        planned=planned,
+        workout_file=workout_file,
+    )
+
+    feedback = AdaptiveFeedbackEngine().generate(comparison)
+
+    return {
+        "comparison": asdict(comparison),
+        "feedback": asdict(feedback),
     }
