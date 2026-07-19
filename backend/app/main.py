@@ -28,6 +28,7 @@ from app.engine.workout_structure_parser import WorkoutStructureParser
 from app.analysis.executed_workout_structure_analyzer import ExecutedWorkoutStructureAnalyzer
 from app.engine.plan_vs_execution_engine import PlanVsExecutionEngine
 from app.engine.adaptive_feedback_engine import AdaptiveFeedbackEngine
+from app.engine.existing_plan_importer import ExistingPlanImporter
 
 app = FastAPI()
 
@@ -474,4 +475,57 @@ def adaptive_feedback(
     return {
         "comparison": asdict(comparison),
         "feedback": asdict(feedback),
+    }
+
+@app.get("/plan/import-test")
+def import_existing_plan_test():
+
+    rows = [
+        {
+            "date": "2026-07-20",
+            "day": "pn",
+            "title": "Strength",
+            "description": "strength 45min",
+            "planned_distance_km": "",
+            "planned_duration_min": "45",
+            "priority": "normal",
+            "notes": "Siła",
+        },
+        {
+            "date": "2026-07-22",
+            "day": "śr",
+            "title": "Easy Run",
+            "description": "easy 10km",
+            "planned_distance_km": "10",
+            "planned_duration_min": "",
+            "priority": "normal",
+            "notes": "10 km E",
+        },
+        {
+            "date": "2026-07-30",
+            "day": "czw",
+            "title": "Threshold",
+            "description": "3km easy + 6km threshold @4:00-4:02 + 2km easy",
+            "planned_distance_km": "11",
+            "planned_duration_min": "",
+            "priority": "key",
+            "notes": "3 km E + 6 km ciągłego progu 4:00-4:02 + 2 km E",
+        },
+        {
+            "date": "2026-07-31",
+            "day": "pt",
+            "title": "Strength",
+            "description": "strength 45min",
+            "planned_distance_km": "",
+            "planned_duration_min": "45",
+            "priority": "normal",
+            "notes": "Siła",
+        },
+    ]
+
+    workouts = ExistingPlanImporter().import_rows(rows)
+
+    return {
+        "imported_count": len(workouts),
+        "workouts": [asdict(workout) for workout in workouts],
     }

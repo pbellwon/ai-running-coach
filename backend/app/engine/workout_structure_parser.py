@@ -5,177 +5,520 @@ class WorkoutStructureParser:
 
     def parse(self, description: str) -> list[dict]:
 
-        text = description.strip().lower()
+        if not description:
+            return []
 
-        structure = []
+        text = description.lower().strip()
 
-        structure.extend(self._find_long_run(text))
-        structure.extend(self._find_easy_distance(text))
-        structure.extend(self._find_threshold_blocks(text))
-        structure.extend(self._find_fast_blocks(text))
-        structure.extend(self._find_strides(text))
-        structure.extend(self._find_hills(text))
-        structure.extend(self._find_progression(text))
+        segments = []
 
-        return structure
+        segments.extend(self._find_easy_km_blocks(text))
+        segments.extend(self._find_long_run(text))
+        segments.extend(self._find_continuous_threshold(text))
+        segments.extend(self._find_threshold_blocks(text))
+        segments.extend(self._find_tempo_time_blocks(text))
+        segments.extend(self._find_fast_blocks(text))
+        segments.extend(self._find_strides(text))
+        segments.extend(self._find_hills(text))
+        segments.extend(self._find_progression(text))
+        segments.extend(self._find_strength(text))
+        segments.extend(self._find_mobility(text))
+        segments.extend(self._find_off(text))
+        segments.extend(self._find_race(text))
 
-    def _find_long_run(self, text: str) -> list[dict]:
+        segments = self._deduplicate_segments(segments)
 
-        blocks = []
+        return self._sort_segments(segments)
 
-        pattern = r"(?:long run|long|długi|dlugi|wybieganie)\s*(\d+(?:\.\d+)?)\s*km"
+    def _find_easy_km_blocks(self, text: str) -> list[dict]:
 
-        matches = re.findall(pattern, text)
+        segments = []
 
-        for distance_km in matches:
-            distance_km = float(distance_km)
+        patterns = [
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*easy",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*e\b",
+            r"easy\s*(\d+(?:[\.,]\d+)?)\s*km",
+            r"e\s*(\d+(?:[\.,]\d+)?)\s*km",
+        ]
 
-            blocks.append(
+        matches = []
+
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                distance_km = self._to_float(match.group(1))
+                matches.append((match.start(), distance_km))
+
+        matches = sorted(matches, key=lambda item: item[0])
+
+        for index, (_, distance_km) in enumerate(matches):
+            segment_name = "main"
+
+            if len(matches) > 1:
+                if index == 0:
+                    segment_name = "warmup"
+                elif index == len(matches) - 1:
+                    segment_name = "cooldown"
+                else:
+                    segment_name = "easy"
+
+            segments.append(
                 {
-                    "segment": "main",
-                    "description": f"Long run {distance_km:g} km",
-                    "distance_km": distance_km,
-                    "intensity": "easy_to_moderate",
-                }
-            )
-
-        return blocks
-
-    def _find_easy_distance(self, text: str) -> list[dict]:
-
-        blocks = []
-
-        pattern = r"(?:easy|easy run|spokojny|luźny|luzny|luźno|luzno)\s*(\d+(?:\.\d+)?)\s*km"
-
-        matches = re.findall(pattern, text)
-
-        for distance_km in matches:
-            distance_km = float(distance_km)
-
-            blocks.append(
-                {
-                    "segment": "main",
-                    "description": f"Easy {distance_km:g} km",
+                    "segment": segment_name,
+                    "description": f"{distance_km:g} km easy",
                     "distance_km": distance_km,
                     "intensity": "easy",
                 }
             )
 
-        return blocks
+        return segments
 
-    def _find_threshold_blocks(self, text: str) -> list[dict]:
+    def _find_long_run(self, text: str) -> list[dict]:
 
-        blocks = []
+        patterns = [
+            r"long\s*run\s*(\d+(?:[\.,]\d+)?)\s*km",
+            r"long\s*(\d+(?:[\.,]\d+)?)\s*km",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*long",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*e.*long",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*spokojny\s*tlen",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*e\.",
+        ]
 
-        pattern_km = r"(\d+)\s*x\s*(\d+(?:\.\d+)?)\s*km"
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if match:
+                distance_km = self._to_float(match.group(1))
 
-        matches = re.findall(pattern_km, text)
-
-        for repetitions, distance_km in matches:
-            distance_km = float(distance_km)
-
-            if distance_km >= 1:
-                blocks.append(
+                return [
                     {
                         "segment": "main",
-                        "description": f"{repetitions} x {distance_km:g} km threshold",
-                        "repetitions": int(repetitions),
+                        "description": f"Long run {distance_km:g} km",
+                        "distance_km": distance_km,
+                        "intensity": "easy",
+                    }
+                ]
+
+        return []
+
+    def _find_continuous_threshold(self, text: str) -> list[dict]:
+
+        segments = []
+
+        patterns = [
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*threshold",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*tempo",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*progu",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*prog",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*ciągłego\s*progu",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*ciaglego\s*progu",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*@\s*\d",
+        ]
+
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                distance_km = self._to_float(match.group(1))
+
+                segments.append(
+                    {
+                        "segment": "main",
+                        "description": f"{distance_km:g} km threshold",
                         "distance_km": distance_km,
                         "intensity": "threshold",
                     }
                 )
 
-        return blocks
+        return segments
 
-    def _find_fast_blocks(self, text: str) -> list[dict]:
+    def _find_threshold_blocks(self, text: str) -> list[dict]:
 
-        blocks = []
+        segments = []
 
-        pattern_m = r"(\d+)\s*x\s*(\d+)\s*m?"
+        patterns = [
+            r"(\d+)\s*x\s*(\d+(?:[\.,]\d+)?)\s*km\s*(?:threshold|tempo|t|prog|progu)?",
+            r"(\d+)\s*×\s*(\d+(?:[\.,]\d+)?)\s*km\s*(?:threshold|tempo|t|prog|progu)?",
+            r"(\d+)\s*x\s*(\d+(?:[\.,]\d+)?)\s*mi\s*(?:threshold|tempo|t|prog|progu)?",
+            r"(\d+)\s*×\s*(\d+(?:[\.,]\d+)?)\s*mi\s*(?:threshold|tempo|t|prog|progu)?",
+        ]
 
-        matches = re.findall(pattern_m, text)
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                repetitions = int(match.group(1))
+                distance = self._to_float(match.group(2))
 
-        for repetitions, distance_m in matches:
-            distance_m = int(distance_m)
+                unit = "mi" if "mi" in match.group(0) else "km"
+                distance_km = distance * 1.60934 if unit == "mi" else distance
 
-            if 50 <= distance_m < 1000:
-                blocks.append(
+                if distance_km < 1:
+                    continue
+
+                intensity = "threshold"
+
+                if self._contains_any(match.group(0), ["vo2"]):
+                    intensity = "vo2max"
+
+                segments.append(
                     {
-                        "segment": "secondary",
-                        "description": f"{repetitions} x {distance_m} m fast",
-                        "repetitions": int(repetitions),
-                        "distance_m": distance_m,
-                        "intensity": "strides" if "strides" in text or "rytmy" in text or "przebieżki" in text or "przebiezki" in text else "vo2max",
+                        "segment": "main",
+                        "description": f"{repetitions} x {distance:g} {unit} {intensity}",
+                        "repetitions": repetitions,
+                        "distance_km": round(distance_km, 3),
+                        "intensity": intensity,
                     }
                 )
 
-        return blocks
+        return segments
+
+    def _find_tempo_time_blocks(self, text: str) -> list[dict]:
+
+        segments = []
+
+        patterns = [
+            r"(\d+)\s*x\s*(\d+)\s*min\s*(?:t|tempo|threshold)?",
+            r"(\d+)\s*×\s*(\d+)\s*min\s*(?:t|tempo|threshold)?",
+            r"(\d+)\s*x\s*(\d+)'\s*(?:t|tempo|threshold)?",
+            r"(\d+)\s*×\s*(\d+)'\s*(?:t|tempo|threshold)?",
+            r"(\d+)\s*min\s*(?:t|tempo|threshold)",
+            r"(\d+)'\s*(?:t|tempo|threshold)",
+        ]
+
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+
+                if len(match.groups()) == 2:
+                    repetitions = int(match.group(1))
+                    duration_min = int(match.group(2))
+                else:
+                    repetitions = 1
+                    duration_min = int(match.group(1))
+
+                segments.append(
+                    {
+                        "segment": "main",
+                        "description": f"{repetitions} x {duration_min} min threshold",
+                        "repetitions": repetitions,
+                        "duration_min": duration_min,
+                        "intensity": "threshold",
+                    }
+                )
+
+        return segments
+
+    def _find_fast_blocks(self, text: str) -> list[dict]:
+
+        segments = []
+
+        patterns = [
+            r"(\d+)\s*x\s*(\d+)\s*m\b",
+            r"(\d+)\s*×\s*(\d+)\s*m\b",
+        ]
+
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                repetitions = int(match.group(1))
+                distance_m = int(match.group(2))
+
+                if distance_m < 50 or distance_m >= 1000:
+                    continue
+
+                intensity = "vo2max"
+
+                if self._contains_any(
+                    text,
+                    [
+                        "stride",
+                        "strides",
+                        "rytmy",
+                        "rytmów",
+                        "rytmow",
+                        "przebieżki",
+                        "przebiezki",
+                        " st",
+                    ],
+                ):
+                    intensity = "strides"
+
+                segments.append(
+                    {
+                        "segment": "secondary",
+                        "description": f"{repetitions} x {distance_m} m {intensity}",
+                        "repetitions": repetitions,
+                        "distance_m": distance_m,
+                        "intensity": intensity,
+                    }
+                )
+
+        return segments
 
     def _find_strides(self, text: str) -> list[dict]:
 
-        blocks = []
+        segments = []
 
-        pattern = r"(\d+)\s*x\s*(\d+)\s*s\s*(?:strides|rytmy|przebieżki|przebiezki)?"
+        patterns = [
+            r"(\d+)\s*x\s*(\d+)\s*s\s*(?:strides|stride|rytmy|rytmów|rytmow)",
+            r"(\d+)\s*×\s*(\d+)\s*s\s*(?:strides|stride|rytmy|rytmów|rytmow)",
+            r"(\d+)\s*x\s*(\d+)\"\s*(?:strides|stride|rytmy|rytmów|rytmow)",
+            r"(\d+)\s*×\s*(\d+)\"\s*(?:strides|stride|rytmy|rytmów|rytmow)",
+        ]
 
-        matches = re.findall(pattern, text)
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                repetitions = int(match.group(1))
+                duration_sec = int(match.group(2))
 
-        for repetitions, duration_sec in matches:
-            duration_sec = int(duration_sec)
-
-            if duration_sec <= 40:
-                blocks.append(
+                segments.append(
                     {
                         "segment": "secondary",
-                        "description": f"{repetitions} x {duration_sec} s strides",
-                        "repetitions": int(repetitions),
+                        "description": f"{repetitions} x {duration_sec} sec strides",
+                        "repetitions": repetitions,
                         "duration_sec": duration_sec,
                         "intensity": "strides",
                     }
                 )
 
-        return blocks
+        return segments
 
     def _find_hills(self, text: str) -> list[dict]:
 
-        blocks = []
+        segments = []
 
-        pattern = r"(\d+)\s*x\s*(\d+)\s*s\s*(?:hills|hill|podbiegi|górki|gorki)"
+        patterns = [
+            r"(\d+)\s*x\s*(\d+)\s*s\s*(?:hill|hills|podbieg|podbiegi)",
+            r"(\d+)\s*×\s*(\d+)\s*s\s*(?:hill|hills|podbieg|podbiegi)",
+            r"(\d+)\s*x\s*(\d+)\"\s*(?:hill|hills|podbieg|podbiegi)",
+            r"(\d+)\s*×\s*(\d+)\"\s*(?:hill|hills|podbieg|podbiegi)",
+            r"(\d+)\s*x\s*(\d+)\s*m\s*(?:hill|hills|podbieg|podbiegi)",
+            r"(\d+)\s*×\s*(\d+)\s*m\s*(?:hill|hills|podbieg|podbiegi)",
+        ]
 
-        matches = re.findall(pattern, text)
+        for pattern in patterns:
+            for match in re.finditer(pattern, text):
+                repetitions = int(match.group(1))
+                value = int(match.group(2))
+                is_distance = "m" in match.group(0)
 
-        for repetitions, duration_sec in matches:
-            duration_sec = int(duration_sec)
-
-            blocks.append(
-                {
+                segment = {
                     "segment": "secondary",
-                    "description": f"{repetitions} x {duration_sec} s hills",
-                    "repetitions": int(repetitions),
-                    "duration_sec": duration_sec,
+                    "description": f"{repetitions} x {value}{'m' if is_distance else 'sec'} hills",
+                    "repetitions": repetitions,
                     "intensity": "hills",
                 }
-            )
 
-        return blocks
+                if is_distance:
+                    segment["distance_m"] = value
+                else:
+                    segment["duration_sec"] = value
+
+                segments.append(segment)
+
+        return segments
 
     def _find_progression(self, text: str) -> list[dict]:
 
-        keywords = [
-            "progression",
-            "fast finish",
-            "szybka końcówka",
-            "szybka koncowka",
-            "narastająco",
-            "narastajaco",
+        if not self._contains_any(
+            text,
+            [
+                "progression",
+                "bnp",
+                "fast finish",
+                "ostatnie",
+                "steady",
+                "->",
+                "→",
+            ],
+        ):
+            return []
+
+        return [
+            {
+                "segment": "finish",
+                "description": "Progression / fast finish",
+                "intensity": "progression",
+            }
         ]
 
-        if any(keyword in text for keyword in keywords):
-            return [
-                {
-                    "segment": "finish",
-                    "description": "Fast finish / progression",
-                    "intensity": "progression",
-                }
-            ]
+    def _find_strength(self, text: str) -> list[dict]:
 
-        return []
+        if not self._contains_any(
+            text,
+            [
+                "strength",
+                "siła",
+                "sila",
+                "siłownia",
+                "silownia",
+                "trening siłowy",
+                "trening silowy",
+            ],
+        ):
+            return []
+
+        duration_min = 45
+
+        match = re.search(r"(\d+)\s*min", text)
+
+        if match:
+            duration_min = int(match.group(1))
+
+        if "lekka" in text:
+            duration_min = min(duration_min, 30)
+
+        return [
+            {
+                "segment": "main",
+                "description": f"Strength {duration_min} min",
+                "duration_min": duration_min,
+                "intensity": "strength",
+            }
+        ]
+
+    def _find_mobility(self, text: str) -> list[dict]:
+
+        if not self._contains_any(
+            text,
+            [
+                "mobility",
+                "mobilność",
+                "mobilnosc",
+                "hip mobility",
+                "rozciąganie",
+                "rozciaganie",
+            ],
+        ):
+            return []
+
+        return [
+            {
+                "segment": "main",
+                "description": "Mobility",
+                "duration_min": 20,
+                "intensity": "mobility",
+            }
+        ]
+
+    def _find_off(self, text: str) -> list[dict]:
+
+        if text not in {"off", "rest"}:
+            return []
+
+        return [
+            {
+                "segment": "main",
+                "description": "Off",
+                "intensity": "off",
+            }
+        ]
+
+    def _find_race(self, text: str) -> list[dict]:
+
+        race_keywords = [
+            "race",
+            "zawody",
+            "start",
+            "atak",
+            "bieg niepodległości",
+            "bieg niepodleglosci",
+            "bieg urodzinowy",
+            "nocny swietojanski",
+            "nocny świętojański",
+            "challenge",
+            "praska",
+            "warszawa",
+            "city trail",
+            "parkrun test",
+        ]
+
+        if not self._contains_any(text, race_keywords):
+            return []
+
+        distance_km = None
+
+        if "10k" in text or "10 km" in text:
+            distance_km = 10
+
+        if "5k" in text or "5 km" in text:
+            distance_km = 5
+
+        if "parkrun" in text:
+            distance_km = 5
+
+        if "półmaraton" in text or "polmaraton" in text or "21k" in text:
+            distance_km = 21.1
+
+        segment = {
+            "segment": "main",
+            "description": "Race",
+            "intensity": "race",
+        }
+
+        if distance_km:
+            segment["distance_km"] = distance_km
+
+        return [segment]
+
+    def _deduplicate_segments(self, segments: list[dict]) -> list[dict]:
+
+        unique_segments = []
+        seen = set()
+
+        for segment in segments:
+            key = (
+                segment.get("segment"),
+                segment.get("distance_km"),
+                segment.get("distance_m"),
+                segment.get("duration_min"),
+                segment.get("duration_sec"),
+                segment.get("intensity"),
+                segment.get("repetitions"),
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            unique_segments.append(segment)
+
+        return unique_segments
+
+    def _sort_segments(self, segments: list[dict]) -> list[dict]:
+
+        segment_order = {
+            "warmup": 10,
+            "main": 20,
+            "easy": 25,
+            "secondary": 30,
+            "finish": 40,
+            "cooldown": 50,
+        }
+
+        intensity_order = {
+            "off": 0,
+            "mobility": 5,
+            "strength": 10,
+            "easy": 20,
+            "tempo": 30,
+            "threshold": 40,
+            "vo2max": 50,
+            "hills": 60,
+            "strides": 70,
+            "progression": 80,
+            "race": 90,
+        }
+
+        def sort_key(segment: dict):
+
+            segment_name = segment.get("segment", "")
+            intensity = segment.get("intensity", "")
+
+            return (
+                segment_order.get(segment_name, 999),
+                intensity_order.get(intensity, 999),
+            )
+
+        return sorted(segments, key=sort_key)
+
+    def _to_float(self, value: str) -> float:
+
+        return float(value.replace(",", "."))
+
+    def _contains_any(self, text: str, patterns: list[str]) -> bool:
+
+        return any(pattern in text for pattern in patterns)
