@@ -35,10 +35,10 @@ class WorkoutStructureParser:
         segments = []
 
         patterns = [
-            r"(\d+(?:[\.,]\d+)?)\s*km\s*easy",
+            r"(\d+(?:[\.,]\d+)?)\s*km\s*easy\b",
             r"(\d+(?:[\.,]\d+)?)\s*km\s*e\b",
-            r"easy\s*(\d+(?:[\.,]\d+)?)\s*km",
-            r"e\s*(\d+(?:[\.,]\d+)?)\s*km",
+            r"\beasy\s*(\d+(?:[\.,]\d+)?)\s*km",
+            r"\be\s*(\d+(?:[\.,]\d+)?)\s*km",
         ]
 
         matches = []
@@ -385,11 +385,18 @@ class WorkoutStructureParser:
         ):
             return []
 
+        duration_min = 20
+
+        match = re.search(r"(\d+)\s*min", text)
+
+        if match:
+            duration_min = int(match.group(1))
+
         return [
             {
                 "segment": "main",
-                "description": "Mobility",
-                "duration_min": 20,
+                "description": f"Mobility {duration_min} min",
+                "duration_min": duration_min,
                 "intensity": "mobility",
             }
         ]

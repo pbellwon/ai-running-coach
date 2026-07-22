@@ -29,6 +29,7 @@ from app.analysis.executed_workout_structure_analyzer import ExecutedWorkoutStru
 from app.engine.plan_vs_execution_engine import PlanVsExecutionEngine
 from app.engine.adaptive_feedback_engine import AdaptiveFeedbackEngine
 from app.engine.existing_plan_importer import ExistingPlanImporter
+from app.integrations.google_sheets_plan_source import GoogleSheetsPlanSource
 
 app = FastAPI()
 
@@ -528,4 +529,27 @@ def import_existing_plan_test():
     return {
         "imported_count": len(workouts),
         "workouts": [asdict(workout) for workout in workouts],
+    }
+
+@app.get("/plan/google-sheets-rows-test")
+def google_sheets_rows_test():
+
+    rows = GoogleSheetsPlanSource().fetch_rows()
+
+    return {
+        "rows_count": len(rows),
+        "sample": rows[:5],
+    }
+
+@app.get("/plan/google-sheets-import-test")
+def google_sheets_import_test():
+
+    rows = GoogleSheetsPlanSource().fetch_rows()
+
+    workouts = ExistingPlanImporter().import_rows(rows)
+
+    return {
+        "rows_count": len(rows),
+        "imported_count": len(workouts),
+        "workouts": [asdict(workout) for workout in workouts[:10]],
     }

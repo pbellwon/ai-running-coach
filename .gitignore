@@ -5,4 +5,7 @@ backend/.venv/
 *.db
 backend/data/
 .vscode/
-.env
+.envbackend/credentials/
+*.credentials.json
+backend/credentials/
+*.credentials.json

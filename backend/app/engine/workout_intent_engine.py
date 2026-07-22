@@ -437,18 +437,15 @@ class WorkoutIntentEngine:
             text,
             [
                 "race",
-                "bieg ",
-                "10k",
-                "5k",
-                "parkrun",
+                "wyścig",
+                "wyscig",
+                "zawody",
                 "półmaraton",
                 "polmaraton",
                 "maraton",
-                "warszawa",
-                "praska",
             ],
         ):
-            if self._contains_any(text, ["easy", " e ", "recovery"]):
+            if self._contains_any(text, ["easy", "recovery"]):
                 pass
             else:
                 return self.classify("race")
@@ -457,8 +454,6 @@ class WorkoutIntentEngine:
             text,
             [
                 "easy",
-                " e",
-                " e ",
                 "spokojny",
                 "luźno",
                 "luzno",
@@ -536,20 +531,6 @@ class WorkoutIntentEngine:
                 " t ",
                 " t/",
                 " t)",
-                "tempo 4:00",
-                "tempo 4:02",
-                "@3:56",
-                "@3:55",
-                "@3:54",
-                "@3:52",
-                "@4:00",
-                "@4:02",
-                "3x3",
-                "4x2",
-                "2x3",
-                "3×3",
-                "4×2",
-                "2×3",
             ],
         )
 
@@ -583,9 +564,6 @@ class WorkoutIntentEngine:
                 "1 km i",
                 "800m",
                 "400m",
-                "3:42",
-                "3:40",
-                "3:38",
             ],
         )
 
