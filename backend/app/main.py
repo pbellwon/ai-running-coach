@@ -30,6 +30,11 @@ from app.engine.plan_vs_execution_engine import PlanVsExecutionEngine
 from app.engine.adaptive_feedback_engine import AdaptiveFeedbackEngine
 from app.engine.existing_plan_importer import ExistingPlanImporter
 from app.integrations.google_sheets_plan_source import GoogleSheetsPlanSource
+from app.services.plan_matcher import PlanMatcher
+from app.services.automatic_plan_comparison_service import (
+    AutomaticPlanComparisonService,
+)
+
 
 app = FastAPI()
 
@@ -553,3 +558,40 @@ def google_sheets_import_test():
         "imported_count": len(workouts),
         "workouts": [asdict(workout) for workout in workouts[:10]],
     }
+
+@app.get("/plan/match-test")
+def match_planned_workout_test(
+    executed_date: str,
+):
+    plan_source = GoogleSheetsPlanSource()
+    importer = ExistingPlanImporter()
+    matcher = PlanMatcher()
+
+    rows = plan_source.fetch_rows()
+    planned_workouts = importer.import_rows(rows)
+
+    matched_workout = matcher.match_by_date(
+        executed_date=executed_date,
+        planned_workouts=planned_workouts,
+    )
+
+    if matched_workout is None:
+        return {
+            "executed_date": executed_date,
+            "matched": False,
+            "planned_workout": None,
+        }
+
+    return {
+        "executed_date": executed_date,
+        "matched": True,
+        "planned_workout": matched_workout,
+    }
+
+@app.get("/plan/automatic-comparison-test")
+def automatic_plan_comparison_test(
+    workout_file: str,
+):
+    return AutomaticPlanComparisonService().compare(
+        workout_file=workout_file,
+    )
