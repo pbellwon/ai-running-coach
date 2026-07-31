@@ -34,6 +34,11 @@ from app.services.plan_matcher import PlanMatcher
 from app.services.automatic_plan_comparison_service import (
     AutomaticPlanComparisonService,
 )
+from app.services.weekly_review_service import WeeklyReviewService
+from dotenv import load_dotenv
+
+load_dotenv(".env", override=True)
+
 
 
 app = FastAPI()
@@ -594,4 +599,12 @@ def automatic_plan_comparison_test(
 ):
     return AutomaticPlanComparisonService().compare(
         workout_file=workout_file,
+    )
+
+@app.get("/review/week-test")
+def weekly_review_test(
+    week_start: str,
+):
+    return WeeklyReviewService().review(
+        week_start=week_start,
     )
