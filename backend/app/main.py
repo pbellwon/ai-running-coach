@@ -16,9 +16,6 @@ from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
 from app.engine.goal_feasibility import GoalFeasibility
 from app.engine.athlete_profile_builder import AthleteProfileBuilder
 from dataclasses import asdict
-from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
-from app.engine.athlete_profile_builder import AthleteProfileBuilder
-from app.analysis.current_fitness_engine import CurrentFitnessEngine
 from app.engine.capability_engine import CapabilityEngine
 from app.analysis.current_fitness_engine import CurrentFitnessEngine
 from app.engine.workout_intent_engine import WorkoutIntentEngine

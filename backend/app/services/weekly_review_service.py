@@ -6,57 +6,90 @@ from datetime import date, datetime, timedelta
 from app.db.database import SessionLocal
 from app.db.models import WorkoutDB
 from app.engine.existing_plan_importer import ExistingPlanImporter
-from app.integrations.google_sheets_plan_source import GoogleSheetsPlanSource
+from app.integrations.google_sheets_plan_source import (
+    GoogleSheetsPlanSource,
+)
 from app.models.executed_session import ExecutedSession
 from app.services.composite_session_builder import (
     CompositeSessionBuilder,
 )
-from app.services.workout_type_matcher import WorkoutTypeMatcher
+from app.services.training_distribution_analyzer import (
+    TrainingDistributionAnalyzer,
+)
+from app.services.workout_type_matcher import (
+    WorkoutTypeMatcher,
+)
 
 
 class WeeklyReviewService:
     """
     Builds a weekly review using logical executed sessions.
 
-    Individual FIT activities may be grouped into one session, for example:
-    - warm-up + race + cooldown;
-    - warm-up + intervals + cooldown.
+    Individual recorded activities may be grouped into one logical
+    session, for example:
+    - warm-up + race + cooldown
+    - warm-up + intervals + cooldown
 
-    Matching is one-to-one between planned workouts and logical sessions.
+    Matching is one-to-one between planned workouts and logical
+    executed sessions.
+
+    The review contains:
+    - plan execution and type compliance
+    - missed and unplanned sessions
+    - training on planned off days
+    - planned and executed distance information
+    - executed training distribution
     """
 
     def review(
         self,
         week_start: date | datetime | str,
     ) -> dict:
-        normalized_week_start = self._normalize_date(week_start)
+        normalized_week_start = self._normalize_date(
+            week_start
+        )
 
         if normalized_week_start.weekday() != 0:
             raise ValueError(
                 "week_start must be a Monday. "
-                f"Received: {normalized_week_start.isoformat()}."
+                f"Received: "
+                f"{normalized_week_start.isoformat()}."
             )
 
-        week_end = normalized_week_start + timedelta(days=6)
-
-        planned_workouts = self._get_planned_workouts(
-            week_start=normalized_week_start,
-            week_end=week_end,
+        week_end = (
+            normalized_week_start
+            + timedelta(days=6)
         )
 
-        executed_workouts = self._get_executed_workouts(
-            week_start=normalized_week_start,
-            week_end=week_end,
+        planned_workouts = (
+            self._get_planned_workouts(
+                week_start=normalized_week_start,
+                week_end=week_end,
+            )
         )
 
-        executed_sessions = CompositeSessionBuilder().build(
-            executed_workouts
+        executed_workouts = (
+            self._get_executed_workouts(
+                week_start=normalized_week_start,
+                week_end=week_end,
+            )
         )
 
-        planned_by_date: dict[date, list] = defaultdict(list)
-        sessions_by_date: dict[date, list[ExecutedSession]] = defaultdict(
-            list
+        executed_sessions = (
+            CompositeSessionBuilder().build(
+                executed_workouts
+            )
         )
+
+        planned_by_date: dict[
+            date,
+            list,
+        ] = defaultdict(list)
+
+        sessions_by_date: dict[
+            date,
+            list[ExecutedSession],
+        ] = defaultdict(list)
 
         for planned_workout in planned_workouts:
             planned_by_date[
@@ -84,9 +117,23 @@ class WeeklyReviewService:
         executed_distance_km = 0.0
         planned_distance_entries_count = 0
 
+        # Used by TrainingDistributionAnalyzer.
+        #
+        # Example:
+        # executed workout_type = easy_run
+        # matched planned type = long_run
+        #
+        # Physiologically it was an easy run,
+        # but its role in the week was a long run.
+        planned_type_by_session_id: dict[
+            str,
+            str,
+        ] = {}
+
         for day_offset in range(7):
-            current_date = normalized_week_start + timedelta(
-                days=day_offset
+            current_date = (
+                normalized_week_start
+                + timedelta(days=day_offset)
             )
 
             day_planned = planned_by_date.get(
@@ -120,8 +167,10 @@ class WeeklyReviewService:
             ):
                 trained_on_off_day_count += 1
 
-            executed_types = self._build_session_type_map(
-                day_sessions
+            executed_types = (
+                self._build_session_type_map(
+                    day_sessions
+                )
             )
 
             match_result = matcher.match_day(
@@ -131,9 +180,18 @@ class WeeklyReviewService:
             )
 
             matches = match_result["matches"]
+
+            # Preserve the role of the matched
+            # planned workout for distribution analysis.
+            for match in matches:
+                planned_type_by_session_id[
+                    match.executed_workout.session_id
+                ] = match.planned_type
+
             unmatched_planned = match_result[
                 "unmatched_planned"
             ]
+
             unmatched_sessions = match_result[
                 "unmatched_executed"
             ]
@@ -152,12 +210,24 @@ class WeeklyReviewService:
                 if not match.type_match
             )
 
-            day_missed_count = len(unmatched_planned)
-            day_unplanned_count = len(unmatched_sessions)
+            day_missed_count = len(
+                unmatched_planned
+            )
+
+            day_unplanned_count = len(
+                unmatched_sessions
+            )
 
             paired_count += day_paired_count
-            type_matched_count += day_type_matched_count
-            type_mismatch_count += day_type_mismatch_count
+
+            type_matched_count += (
+                day_type_matched_count
+            )
+
+            type_mismatch_count += (
+                day_type_mismatch_count
+            )
+
             missed_count += day_missed_count
             unplanned_count += day_unplanned_count
 
@@ -174,19 +244,27 @@ class WeeklyReviewService:
             planned_entries = []
 
             for planned_workout in day_planned:
-                if planned_workout.planned_distance_km is not None:
+                if (
+                    planned_workout.planned_distance_km
+                    is not None
+                ):
                     planned_distance_km += (
-                        planned_workout.planned_distance_km
+                        planned_workout
+                        .planned_distance_km
                     )
 
                     planned_distance_entries_count += 1
 
-                if planned_workout.workout_type == "off":
+                if (
+                    planned_workout.workout_type
+                    == "off"
+                ):
                     match_status = "off"
                     matched_executed_type = None
                     matched_session_id = None
                     type_match = None
                     match_score = None
+
                 else:
                     match = planned_match_map.get(
                         id(planned_workout)
@@ -198,55 +276,98 @@ class WeeklyReviewService:
                         matched_session_id = None
                         type_match = False
                         match_score = None
+
                     elif match.type_match:
-                        match_status = "type_matched"
+                        match_status = (
+                            "type_matched"
+                        )
+
                         matched_executed_type = (
                             match.executed_type
                         )
+
                         matched_session_id = (
-                            match.executed_workout.session_id
+                            match
+                            .executed_workout
+                            .session_id
                         )
+
                         type_match = True
-                        match_score = match.match_score
+                        match_score = (
+                            match.match_score
+                        )
+
                     else:
-                        match_status = "type_mismatch"
+                        match_status = (
+                            "type_mismatch"
+                        )
+
                         matched_executed_type = (
                             match.executed_type
                         )
+
                         matched_session_id = (
-                            match.executed_workout.session_id
+                            match
+                            .executed_workout
+                            .session_id
                         )
+
                         type_match = False
-                        match_score = match.match_score
+                        match_score = (
+                            match.match_score
+                        )
 
                 planned_entries.append(
                     {
-                        "title": planned_workout.title,
-                        "description": planned_workout.description,
-                        "workout_type": planned_workout.workout_type,
+                        "title": (
+                            planned_workout.title
+                        ),
+                        "description": (
+                            planned_workout.description
+                        ),
+                        "workout_type": (
+                            planned_workout.workout_type
+                        ),
                         "planned_distance_km": (
-                            planned_workout.planned_distance_km
+                            planned_workout
+                            .planned_distance_km
                         ),
                         "planned_duration_min": (
-                            planned_workout.planned_duration_min
+                            planned_workout
+                            .planned_duration_min
                         ),
-                        "priority": planned_workout.priority,
-                        "match_status": match_status,
-                        "matched_session_id": matched_session_id,
+                        "priority": (
+                            planned_workout.priority
+                        ),
+                        "match_status": (
+                            match_status
+                        ),
+                        "matched_session_id": (
+                            matched_session_id
+                        ),
                         "matched_executed_type": (
                             matched_executed_type
                         ),
-                        "type_match": type_match,
-                        "match_score": match_score,
+                        "type_match": (
+                            type_match
+                        ),
+                        "match_score": (
+                            match_score
+                        ),
                     }
                 )
 
             executed_session_entries = []
 
             for executed_session in day_sessions:
-                if executed_session.total_distance_km is not None:
+                if (
+                    executed_session
+                    .total_distance_km
+                    is not None
+                ):
                     executed_distance_km += (
-                        executed_session.total_distance_km
+                        executed_session
+                        .total_distance_km
                     )
 
                 match = session_match_map.get(
@@ -259,51 +380,92 @@ class WeeklyReviewService:
                     matched_planned_type = None
                     type_match = False
                     match_score = None
+
                 else:
                     matched_to_plan = True
+
                     matched_planned_title = (
                         match.planned_workout.title
                     )
+
                     matched_planned_type = (
                         match.planned_type
                     )
-                    type_match = match.type_match
-                    match_score = match.match_score
+
+                    type_match = (
+                        match.type_match
+                    )
+
+                    match_score = (
+                        match.match_score
+                    )
 
                 executed_session_entries.append(
                     self._serialize_session(
                         session=executed_session,
-                        matched_to_plan=matched_to_plan,
+                        matched_to_plan=(
+                            matched_to_plan
+                        ),
                         matched_planned_title=(
                             matched_planned_title
                         ),
                         matched_planned_type=(
                             matched_planned_type
                         ),
-                        type_match=type_match,
-                        match_score=match_score,
+                        type_match=(
+                            type_match
+                        ),
+                        match_score=(
+                            match_score
+                        ),
                     )
                 )
 
-            day_status = self._determine_day_status(
-                training_plans_count=len(training_plans),
-                off_plans_count=len(off_plans),
-                executed_sessions_count=len(day_sessions),
-                paired_count=day_paired_count,
-                type_matched_count=day_type_matched_count,
-                type_mismatch_count=(
-                    day_type_mismatch_count
-                ),
-                missed_count=day_missed_count,
-                unplanned_count=day_unplanned_count,
+            day_status = (
+                self._determine_day_status(
+                    training_plans_count=len(
+                        training_plans
+                    ),
+                    off_plans_count=len(
+                        off_plans
+                    ),
+                    executed_sessions_count=len(
+                        day_sessions
+                    ),
+                    paired_count=(
+                        day_paired_count
+                    ),
+                    type_matched_count=(
+                        day_type_matched_count
+                    ),
+                    type_mismatch_count=(
+                        day_type_mismatch_count
+                    ),
+                    missed_count=(
+                        day_missed_count
+                    ),
+                    unplanned_count=(
+                        day_unplanned_count
+                    ),
+                )
             )
 
             days.append(
                 {
-                    "date": current_date.isoformat(),
-                    "day": current_date.strftime("%A"),
-                    "status": day_status,
-                    "planned_workouts": planned_entries,
+                    "date": (
+                        current_date.isoformat()
+                    ),
+                    "day": (
+                        current_date.strftime(
+                            "%A"
+                        )
+                    ),
+                    "status": (
+                        day_status
+                    ),
+                    "planned_workouts": (
+                        planned_entries
+                    ),
                     "executed_sessions": (
                         executed_session_entries
                     ),
@@ -317,7 +479,9 @@ class WeeklyReviewService:
         )
 
         execution_rate = (
-            paired_count / planned_training_count * 100
+            paired_count
+            / planned_training_count
+            * 100
             if planned_training_count
             else 0.0
         )
@@ -331,7 +495,9 @@ class WeeklyReviewService:
         )
 
         paired_type_compliance_rate = (
-            type_matched_count / paired_count * 100
+            type_matched_count
+            / paired_count
+            * 100
             if paired_count
             else 0.0
         )
@@ -342,14 +508,31 @@ class WeeklyReviewService:
         )
 
         distance_difference_km = (
-            executed_distance_km - planned_distance_km
+            executed_distance_km
+            - planned_distance_km
             if planned_distance_complete
             else None
         )
 
+        # Training distribution is calculated only after
+        # plan-to-session matching, because some session roles
+        # such as long_run are plan-aware.
+        training_distribution = (
+            TrainingDistributionAnalyzer().analyze(
+                sessions=executed_sessions,
+                planned_type_by_session_id=(
+                    planned_type_by_session_id
+                ),
+            )
+        )
+
         return {
-            "week_start": normalized_week_start.isoformat(),
-            "week_end": week_end.isoformat(),
+            "week_start": (
+                normalized_week_start.isoformat()
+            ),
+            "week_end": (
+                week_end.isoformat()
+            ),
             "summary": {
                 "planned_entries_count": len(
                     planned_workouts
@@ -358,34 +541,42 @@ class WeeklyReviewService:
                     planned_training_count
                 ),
 
-                # Physical activity files stored in WorkoutDB.
-                "executed_source_activities_count": len(
-                    executed_workouts
+                # Raw activity files stored in WorkoutDB.
+                "executed_source_activities_count": (
+                    len(executed_workouts)
                 ),
 
-                # Logical training sessions after grouping.
-                "executed_sessions_count": len(
-                    executed_sessions
+                # Logical sessions after grouping.
+                "executed_sessions_count": (
+                    len(executed_sessions)
                 ),
 
-                # Kept temporarily for API compatibility.
-                "executed_workouts_count": len(
-                    executed_sessions
+                # Temporary API compatibility field.
+                "executed_workouts_count": (
+                    len(executed_sessions)
                 ),
 
-                "matched_workouts_count": paired_count,
-                "paired_workouts_count": paired_count,
+                "matched_workouts_count": (
+                    paired_count
+                ),
+                "paired_workouts_count": (
+                    paired_count
+                ),
                 "type_matched_workouts_count": (
                     type_matched_count
                 ),
                 "type_mismatch_workouts_count": (
                     type_mismatch_count
                 ),
-                "missed_workouts_count": missed_count,
+                "missed_workouts_count": (
+                    missed_count
+                ),
                 "unplanned_workouts_count": (
                     unplanned_count
                 ),
-                "off_days_count": off_days_count,
+                "off_days_count": (
+                    off_days_count
+                ),
                 "trained_on_off_day_count": (
                     trained_on_off_day_count
                 ),
@@ -404,23 +595,34 @@ class WeeklyReviewService:
                     2,
                 ),
                 "distance_difference_km": (
-                    round(distance_difference_km, 2)
-                    if distance_difference_km is not None
+                    round(
+                        distance_difference_km,
+                        2,
+                    )
+                    if distance_difference_km
+                    is not None
                     else None
                 ),
                 "execution_rate_percent": round(
                     execution_rate,
                     1,
                 ),
-                "type_compliance_rate_percent": round(
-                    type_compliance_rate,
-                    1,
+                "type_compliance_rate_percent": (
+                    round(
+                        type_compliance_rate,
+                        1,
+                    )
                 ),
-                "paired_type_compliance_rate_percent": round(
-                    paired_type_compliance_rate,
-                    1,
+                "paired_type_compliance_rate_percent": (
+                    round(
+                        paired_type_compliance_rate,
+                        1,
+                    )
                 ),
             },
+            "training_distribution": (
+                training_distribution
+            ),
             "days": days,
         }
 
@@ -430,12 +632,18 @@ class WeeklyReviewService:
     ) -> dict[str, dict]:
         return {
             session.session_id: {
-                "workout_type": session.workout_type,
-                "confidence": session.confidence,
+                "workout_type": (
+                    session.workout_type
+                ),
+                "confidence": (
+                    session.confidence
+                ),
                 "classification_method": (
                     session.classification_method
                 ),
-                "warnings": session.warnings,
+                "warnings": (
+                    session.warnings
+                ),
             }
             for session in sessions
         }
@@ -450,58 +658,100 @@ class WeeklyReviewService:
         match_score: int | None,
     ) -> dict:
         return {
-            "session_id": session.session_id,
-            "start_time": session.start_time.isoformat(),
-            "end_time": session.end_time.isoformat(),
-            "sport_family": session.sport_family,
-            "workout_type": session.workout_type,
+            "session_id": (
+                session.session_id
+            ),
+            "start_time": (
+                session.start_time.isoformat()
+            ),
+            "end_time": (
+                session.end_time.isoformat()
+            ),
+            "sport_family": (
+                session.sport_family
+            ),
+            "workout_type": (
+                session.workout_type
+            ),
             "classification_confidence": (
                 session.confidence
             ),
             "classification_method": (
                 session.classification_method
             ),
-            "classification_warnings": session.warnings,
-            "activities_count": session.activities_count,
-            "source_files": session.source_files,
+            "classification_warnings": (
+                session.warnings
+            ),
+            "activities_count": (
+                session.activities_count
+            ),
+            "source_files": (
+                session.source_files
+            ),
             "total_distance_km": (
                 session.total_distance_km
             ),
             "total_duration_min": (
                 session.total_duration_min
             ),
-            "matched_to_plan": matched_to_plan,
+            "matched_to_plan": (
+                matched_to_plan
+            ),
             "matched_planned_title": (
                 matched_planned_title
             ),
             "matched_planned_type": (
                 matched_planned_type
             ),
-            "type_match": type_match,
-            "match_score": match_score,
+            "type_match": (
+                type_match
+            ),
+            "match_score": (
+                match_score
+            ),
             "components": [
                 {
-                    "workout_file": component.workout_file,
-                    "role": component.role,
+                    "workout_file": (
+                        component.workout_file
+                    ),
+                    "role": (
+                        component.role
+                    ),
                     "start_time": (
-                        component.start_time.isoformat()
+                        component
+                        .start_time
+                        .isoformat()
                     ),
                     "end_time": (
-                        component.end_time.isoformat()
+                        component
+                        .end_time
+                        .isoformat()
                     ),
-                    "sport": component.sport,
-                    "distance_km": component.distance_km,
-                    "duration_min": component.duration_min,
+                    "sport": (
+                        component.sport
+                    ),
+                    "distance_km": (
+                        component.distance_km
+                    ),
+                    "duration_min": (
+                        component.duration_min
+                    ),
                     "workout_type": (
                         component.workout_type
                     ),
-                    "confidence": component.confidence,
-                    "classification_method": (
-                        component.classification_method
+                    "confidence": (
+                        component.confidence
                     ),
-                    "warnings": component.warnings,
+                    "classification_method": (
+                        component
+                        .classification_method
+                    ),
+                    "warnings": (
+                        component.warnings
+                    ),
                 }
-                for component in session.components
+                for component
+                in session.components
             ],
         }
 
@@ -510,18 +760,24 @@ class WeeklyReviewService:
         week_start: date,
         week_end: date,
     ) -> list:
-        rows = GoogleSheetsPlanSource().fetch_rows()
+        rows = (
+            GoogleSheetsPlanSource()
+            .fetch_rows()
+        )
 
-        workouts = ExistingPlanImporter().import_rows(
-            rows
+        workouts = (
+            ExistingPlanImporter()
+            .import_rows(rows)
         )
 
         return [
             workout
             for workout in workouts
-            if week_start
-            <= workout.planned_date
-            <= week_end
+            if (
+                week_start
+                <= workout.planned_date
+                <= week_end
+            )
         ]
 
     def _get_executed_workouts(
@@ -545,16 +801,19 @@ class WeeklyReviewService:
             return (
                 db.query(WorkoutDB)
                 .filter(
-                    WorkoutDB.start_time >= range_start
+                    WorkoutDB.start_time
+                    >= range_start
                 )
                 .filter(
-                    WorkoutDB.start_time < range_end
+                    WorkoutDB.start_time
+                    < range_end
                 )
                 .order_by(
                     WorkoutDB.start_time.asc()
                 )
                 .all()
             )
+
         finally:
             db.close()
 
@@ -596,7 +855,10 @@ class WeeklyReviewService:
         ):
             return "unplanned_execution"
 
-        if missed_count > 0 and paired_count == 0:
+        if (
+            missed_count > 0
+            and paired_count == 0
+        ):
             return "missed"
 
         if missed_count > 0:
@@ -606,11 +868,14 @@ class WeeklyReviewService:
             return "executed_type_mismatch"
 
         if unplanned_count > 0:
-            return "executed_with_extra_workout"
+            return (
+                "executed_with_extra_workout"
+            )
 
         if (
             paired_count > 0
-            and type_matched_count == paired_count
+            and type_matched_count
+            == paired_count
         ):
             return "executed_as_planned"
 
@@ -638,9 +903,11 @@ class WeeklyReviewService:
                 return date.fromisoformat(
                     normalized_value
                 )
+
             except ValueError as exc:
                 raise ValueError(
-                    "week_start must use YYYY-MM-DD format."
+                    "week_start must use "
+                    "YYYY-MM-DD format."
                 ) from exc
 
         raise TypeError(
