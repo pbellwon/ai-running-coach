@@ -23,6 +23,41 @@ class WorkoutDB(Base):
     records_count = Column(Integer)
     laps_count = Column(Integer)
 
+
+class DailyAthleteStateDB(Base):
+    __tablename__ = "daily_athlete_states"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    date = Column(DateTime, unique=True, index=True)
+
+    resting_hr = Column(Float)
+    hrv = Column(Float)
+    hrv_sdnn = Column(Float)
+
+    sleep_sec = Column(Float)
+    sleep_score = Column(Float)
+    sleep_quality = Column(Float)
+    avg_sleeping_hr = Column(Float)
+
+    ctl = Column(Float)
+    atl = Column(Float)
+    ramp_rate = Column(Float)
+
+    weight_kg = Column(Float)
+    vo2max = Column(Float)
+    steps = Column(Integer)
+
+    soreness = Column(Float)
+    fatigue = Column(Float)
+    stress = Column(Float)
+    mood = Column(Float)
+    motivation = Column(Float)
+    readiness = Column(Float)
+
+    spo2 = Column(Float)
+
+
 class LapDB(Base):
     __tablename__ = "laps"
 

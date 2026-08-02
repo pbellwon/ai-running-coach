@@ -35,6 +35,15 @@ from app.services.weekly_review_service import WeeklyReviewService
 from dotenv import load_dotenv
 
 load_dotenv(".env", override=True)
+from app.integrations.intervals_icu_client import (
+    IntervalsIcuClient,
+)
+from app.services.intervals_activity_sync_service import (
+    IntervalsActivitySyncService,
+)
+from app.services.intervals_wellness_sync_service import (
+    IntervalsWellnessSyncService,
+)
 
 
 
@@ -604,4 +613,76 @@ def weekly_review_test(
 ):
     return WeeklyReviewService().review(
         week_start=week_start,
+    )
+
+@app.get("/intervals/connection-test")
+def intervals_connection_test():
+    athlete = IntervalsIcuClient().get_athlete()
+
+    return {
+        "status": "ok",
+        "source": "intervals_icu",
+        "athlete": athlete,
+    }
+
+@app.get("/intervals/activities-test")
+def intervals_activities_test(
+    oldest: str,
+    newest: str,
+):
+    activities = (
+        IntervalsIcuClient().get_activities(
+            oldest=oldest,
+            newest=newest,
+        )
+    )
+
+    return {
+        "status": "ok",
+        "source": "intervals_icu",
+        "oldest": oldest,
+        "newest": newest,
+        "count": len(activities),
+        "activities": activities,
+    }
+
+@app.post("/intervals/sync-test")
+def intervals_sync_test(
+    oldest: str,
+    newest: str,
+):
+    return IntervalsActivitySyncService().sync(
+        oldest=oldest,
+        newest=newest,
+    )
+
+@app.get("/intervals/wellness-test")
+def intervals_wellness_test(
+    oldest: str,
+    newest: str,
+):
+    wellness = (
+        IntervalsIcuClient().get_wellness(
+            oldest=oldest,
+            newest=newest,
+        )
+    )
+
+    return {
+        "status": "ok",
+        "source": "intervals_icu",
+        "oldest": oldest,
+        "newest": newest,
+        "count": len(wellness),
+        "wellness": wellness,
+    }
+
+@app.post("/intervals/wellness-sync-test")
+def intervals_wellness_sync_test(
+    oldest: str,
+    newest: str,
+):
+    return IntervalsWellnessSyncService().sync(
+        oldest=oldest,
+        newest=newest,
     )
