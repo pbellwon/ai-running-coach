@@ -44,6 +44,15 @@ from app.services.intervals_activity_sync_service import (
 from app.services.intervals_wellness_sync_service import (
     IntervalsWellnessSyncService,
 )
+from app.services.recovery_snapshot_service import (
+    RecoverySnapshotService,
+)
+from app.services.recovery_trend_service import (
+    RecoveryTrendService,
+)
+from app.services.training_context_service import (
+    TrainingContextService,
+)
 
 
 
@@ -686,3 +695,33 @@ def intervals_wellness_sync_test(
         oldest=oldest,
         newest=newest,
     )
+
+@app.get("/recovery/snapshot-test")
+def recovery_snapshot_test(
+    target_date: str,
+):
+    snapshot = RecoverySnapshotService().build(
+        target_date
+    )
+
+    return asdict(snapshot)
+
+@app.get("/recovery/trend-test")
+def recovery_trend_test(
+    target_date: str,
+):
+    trend = RecoveryTrendService().build(
+        target_date
+    )
+
+    return asdict(trend)
+
+@app.get("/recovery/training-context-test")
+def training_context_test(
+    target_date: str,
+):
+    context = TrainingContextService().build(
+        target_date
+    )
+
+    return asdict(context)

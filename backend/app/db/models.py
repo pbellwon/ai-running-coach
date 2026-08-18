@@ -1,4 +1,12 @@
-from sqlalchemy import Column, Integer, Float, String, DateTime
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+)
 from .database import Base
 
 
@@ -22,6 +30,22 @@ class WorkoutDB(Base):
 
     records_count = Column(Integer)
     laps_count = Column(Integer)
+
+    activity_name = Column(String)
+    description = Column(Text)
+
+    external_type = Column(String)
+    source_platform = Column(String)
+
+    training_load = Column(Float)
+    rpe = Column(Float)
+    race = Column(Boolean)
+
+    interval_summary = Column(Text)
+
+    declared_workout_type = Column(String)
+
+    declared_session_role = Column(String)
 
 
 class DailyAthleteStateDB(Base):

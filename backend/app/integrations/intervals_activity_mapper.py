@@ -1,20 +1,20 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from app.db.models import WorkoutDB
+from app.services.intervals_declared_type_classifier import (
+    IntervalsDeclaredTypeClassifier,
+)
 
 
 class IntervalsActivityMapper:
     """
-    Maps an Intervals.icu activity payload into the current
-    PaceMind WorkoutDB model.
+    Maps Intervals.icu activity data into WorkoutDB.
 
-    The mapper intentionally uses only stable fields required
-    by the existing domain model.
-
-    Intervals-specific metadata such as training load, RPE,
-    CTL and ATL will be added in a later schema extension.
+    Intervals metadata is preserved so that PaceMind can classify
+    current activities without requiring downloaded FIT files.
     """
 
     SOURCE_PREFIX = "intervals_icu"
@@ -30,7 +30,21 @@ class IntervalsActivityMapper:
         "Walk": "walking",
     }
 
-    def map(self, activity: dict) -> WorkoutDB:
+    def __init__(
+        self,
+        declared_type_classifier: (
+            IntervalsDeclaredTypeClassifier | None
+        ) = None,
+    ):
+        self.declared_type_classifier = (
+            declared_type_classifier
+            or IntervalsDeclaredTypeClassifier()
+        )
+
+    def map(
+        self,
+        activity: dict,
+    ) -> WorkoutDB:
         activity_id = activity.get("id")
 
         if not activity_id:
@@ -38,12 +52,29 @@ class IntervalsActivityMapper:
                 "Intervals activity is missing id."
             )
 
-        start_time = self._parse_start_time(
-            activity.get("start_date_local")
+        activity_name = self._to_string(
+            activity.get("name")
         )
 
-        sport = self._map_sport(
+        description = self._to_string(
+            activity.get("description")
+        )
+
+        external_type = self._to_string(
             activity.get("type")
+        )
+
+        race = self._to_bool(
+            activity.get("race")
+        )
+
+        declared_classification = (
+            self.declared_type_classifier.classify(
+            name=activity_name,
+            description=description,
+            race=race,
+            external_type=external_type,
+            )
         )
 
         distance_km = self._meters_to_km(
@@ -54,40 +85,56 @@ class IntervalsActivityMapper:
             activity
         )
 
-        avg_hr = self._to_float(
-            activity.get("average_heartrate")
-        )
-
-        max_hr = self._to_float(
-            activity.get("max_heartrate")
-        )
-
-        avg_pace_sec_per_km = (
-            self._calculate_pace(
-                distance_km=distance_km,
-                duration_sec=duration_sec,
-            )
-        )
-
-        laps_count = self._to_int(
-            activity.get("icu_lap_count")
-        )
-
         return WorkoutDB(
             source_file=self.build_source_key(
                 activity_id
             ),
-            start_time=start_time,
-            sport=sport,
+            start_time=self._parse_start_time(
+                activity.get("start_date_local")
+            ),
+            sport=self._map_sport(
+                external_type
+            ),
             distance_km=distance_km,
             duration_sec=duration_sec,
-            avg_hr=avg_hr,
-            max_hr=max_hr,
+            avg_hr=self._to_float(
+                activity.get("average_heartrate")
+            ),
+            max_hr=self._to_float(
+                activity.get("max_heartrate")
+            ),
             avg_pace_sec_per_km=(
-                avg_pace_sec_per_km
+                self._calculate_pace(
+                    distance_km=distance_km,
+                    duration_sec=duration_sec,
+                )
             ),
             records_count=None,
-            laps_count=laps_count,
+            laps_count=self._to_int(
+                activity.get("icu_lap_count")
+            ),
+            activity_name=activity_name,
+            description=description,
+            external_type=external_type,
+            source_platform=self._to_string(
+                activity.get("source")
+            ),
+            training_load=self._to_float(
+                activity.get("icu_training_load")
+            ),
+            rpe=self._to_float(
+                activity.get("icu_rpe")
+            ),
+            race=race,
+            interval_summary=self._serialize_json(
+                activity.get("interval_summary")
+            ),
+            declared_workout_type=(
+                declared_classification.workout_type
+            ),
+            declared_session_role=(
+                declared_classification.session_role    
+            ),
         )
 
     def build_source_key(
@@ -110,13 +157,11 @@ class IntervalsActivityMapper:
             )
 
         try:
-            return datetime.fromisoformat(
-                value
-            )
+            return datetime.fromisoformat(value)
+
         except ValueError as exc:
             raise ValueError(
-                "Invalid Intervals "
-                "start_date_local."
+                "Invalid Intervals start_date_local."
             ) from exc
 
     def _map_sport(
@@ -149,12 +194,6 @@ class IntervalsActivityMapper:
         self,
         activity: dict,
     ) -> float | None:
-        """
-        Prefer moving_time for endurance activities.
-
-        Fall back to recording_time and finally elapsed_time.
-        """
-
         for field in (
             "moving_time",
             "icu_recording_time",
@@ -187,6 +226,29 @@ class IntervalsActivityMapper:
             2,
         )
 
+    def _serialize_json(
+        self,
+        value,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+        )
+
+    def _to_string(
+        self,
+        value,
+    ) -> str | None:
+        if value is None:
+            return None
+
+        normalized = str(value).strip()
+
+        return normalized or None
+
     def _to_float(
         self,
         value,
@@ -196,6 +258,7 @@ class IntervalsActivityMapper:
 
         try:
             return float(value)
+
         except (TypeError, ValueError):
             return None
 
@@ -208,5 +271,22 @@ class IntervalsActivityMapper:
 
         try:
             return int(value)
+
         except (TypeError, ValueError):
             return None
+
+    def _to_bool(
+        self,
+        value,
+    ) -> bool | None:
+        if value is None:
+            return None
+
+        if isinstance(value, bool):
+            return value
+
+        return str(value).strip().lower() in {
+            "true",
+            "1",
+            "yes",
+        }

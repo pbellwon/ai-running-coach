@@ -1,33 +1,86 @@
 from __future__ import annotations
 
-from app.analysis.executed_workout_structure_analyzer import (
-    ExecutedWorkoutStructureAnalyzer,
-)
 from app.db.models import WorkoutDB
 
 
 class ExecutedWorkoutTypeResolver:
     """
-    Resolves the semantic type of an executed workout.
+    Resolves the executed workout type for a WorkoutDB activity.
 
-    Running workouts are classified using lap and structure analysis.
-    Other sports are resolved primarily from WorkoutDB.sport.
+    Priority:
+
+    1. Intervals.icu declared_workout_type
+    2. Non-running sport mapping
+    3. Running heuristics based on available summary data
+    4. unknown fallback
+
+    Important:
+    declared_session_role is intentionally NOT used here.
+
+    Example:
+        "Long tempo"
+
+        declared_workout_type = tempo_run
+        declared_session_role = long_run
+
+    This resolver returns the physiological/executed workout type.
+    Session role is handled separately.
     """
 
     def resolve(
         self,
         workout: WorkoutDB,
     ) -> dict:
-        sport = self._normalize_sport(workout.sport)
+        declared_type = getattr(
+            workout,
+            "declared_workout_type",
+            None,
+        )
 
-        if sport == "running":
-            return self._resolve_running(workout)
+        if declared_type:
+            return {
+                "workout_type": declared_type,
+                "confidence": 0.9,
+                "classification_method": (
+                    "intervals_declared_type"
+                ),
+                "warnings": [],
+            }
+
+        sport_result = self._resolve_by_sport(
+            workout
+        )
+
+        if sport_result is not None:
+            return sport_result
+
+        if workout.sport == "running":
+            return self._resolve_running(
+                workout
+            )
+
+        return self._unknown(
+            warning=(
+                "Unable to classify workout "
+                "from available activity data."
+            )
+        )
+
+    def _resolve_by_sport(
+        self,
+        workout: WorkoutDB,
+    ) -> dict | None:
+        sport = (
+            workout.sport or ""
+        ).strip().lower()
 
         if sport == "training":
             return {
                 "workout_type": "strength",
                 "confidence": 0.95,
-                "classification_method": "sport_mapping",
+                "classification_method": (
+                    "sport_mapping"
+                ),
                 "warnings": [],
             }
 
@@ -35,7 +88,9 @@ class ExecutedWorkoutTypeResolver:
             return {
                 "workout_type": "bike",
                 "confidence": 0.95,
-                "classification_method": "sport_mapping",
+                "classification_method": (
+                    "sport_mapping"
+                ),
                 "warnings": [],
             }
 
@@ -43,96 +98,261 @@ class ExecutedWorkoutTypeResolver:
             return {
                 "workout_type": "swimming",
                 "confidence": 0.95,
-                "classification_method": "sport_mapping",
+                "classification_method": (
+                    "sport_mapping"
+                ),
                 "warnings": [],
             }
 
-        if sport in {
-            "walking",
-            "hiking",
-            "mountaineering",
-        }:
+        if sport == "walking":
             return {
-                "workout_type": "low_intensity_cross_training",
-                "confidence": 0.85,
-                "classification_method": "sport_mapping",
+                "workout_type": "walking",
+                "confidence": 0.95,
+                "classification_method": (
+                    "sport_mapping"
+                ),
                 "warnings": [],
             }
 
-        if sport == "fitness_equipment":
+        if sport == "hiking":
             return {
-                "workout_type": "cross_training",
-                "confidence": 0.8,
-                "classification_method": "sport_mapping",
-                "warnings": [
-                    "Fitness equipment activity type is not specific."
-                ],
-            }
-
-        if sport in {
-            "stand_up_paddleboarding",
-            "surfing",
-            "kayaking",
-        }:
-            return {
-                "workout_type": "other_endurance",
-                "confidence": 0.8,
-                "classification_method": "sport_mapping",
+                "workout_type": "hiking",
+                "confidence": 0.95,
+                "classification_method": (
+                    "sport_mapping"
+                ),
                 "warnings": [],
             }
 
-        return {
-            "workout_type": "unknown",
-            "confidence": 0.2,
-            "classification_method": "sport_mapping",
-            "warnings": [
-                f"Unsupported executed sport: {sport or 'missing'}."
-            ],
-        }
+        return None
 
     def _resolve_running(
         self,
         workout: WorkoutDB,
     ) -> dict:
-        if not workout.source_file:
+        """
+        Fallback classification for running activities when
+        no declared workout type is available.
+
+        Current Intervals.icu activities should normally be
+        classified through declared_workout_type.
+
+        These heuristics mainly preserve compatibility with
+        older FIT-based imports.
+        """
+
+        avg_hr = self._to_float(
+            workout.avg_hr
+        )
+
+        max_hr = self._to_float(
+            workout.max_hr
+        )
+
+        pace = self._to_float(
+            workout.avg_pace_sec_per_km
+        )
+
+        laps_count = self._to_int(
+            workout.laps_count
+        )
+
+        distance_km = self._to_float(
+            workout.distance_km
+        )
+
+        duration_sec = self._to_float(
+            workout.duration_sec
+        )
+
+        warnings = [
+            "Classification based only on executed lap pattern."
+        ]
+
+        if self._looks_like_vo2max(
+            laps_count=laps_count,
+            avg_hr=avg_hr,
+            max_hr=max_hr,
+            duration_sec=duration_sec,
+        ):
             return {
-                "workout_type": "unknown",
-                "confidence": 0.2,
-                "classification_method": "missing_source_file",
-                "warnings": [
-                    "Running workout has no source file."
+                "workout_type": "vo2max",
+                "confidence": 0.6,
+                "classification_method": (
+                    "lap_pattern"
+                ),
+                "warnings": warnings
+                + [
+                    "VO2max classification is estimated "
+                    "from short fast repetitions."
                 ],
             }
 
-        analysis = ExecutedWorkoutStructureAnalyzer().analyze(
-            workout.source_file
+        if self._looks_like_tempo(
+            laps_count=laps_count,
+            avg_hr=avg_hr,
+            pace=pace,
+            distance_km=distance_km,
+            duration_sec=duration_sec,
+        ):
+            return {
+                "workout_type": "tempo_run",
+                "confidence": 0.7,
+                "classification_method": (
+                    "lap_pattern"
+                ),
+                "warnings": warnings
+                + [
+                    "Tempo block detected from "
+                    "consecutive similar laps."
+                ],
+            }
+
+        if self._looks_like_easy_run(
+            avg_hr=avg_hr,
+            distance_km=distance_km,
+            duration_sec=duration_sec,
+        ):
+            return {
+                "workout_type": "easy_run",
+                "confidence": 0.65,
+                "classification_method": (
+                    "lap_pattern"
+                ),
+                "warnings": warnings,
+            }
+
+        return self._unknown(
+            warning=(
+                "Running activity could not be "
+                "classified reliably."
+            )
         )
 
-        summary = analysis.get("summary", {})
+    def _looks_like_vo2max(
+        self,
+        laps_count: int | None,
+        avg_hr: float | None,
+        max_hr: float | None,
+        duration_sec: float | None,
+    ) -> bool:
+        if (
+            laps_count is None
+            or laps_count < 8
+        ):
+            return False
 
+        if (
+            duration_sec is None
+            or duration_sec < 20 * 60
+        ):
+            return False
+
+        if (
+            max_hr is not None
+            and avg_hr is not None
+            and max_hr - avg_hr >= 12
+        ):
+            return True
+
+        return laps_count >= 12
+
+    def _looks_like_tempo(
+        self,
+        laps_count: int | None,
+        avg_hr: float | None,
+        pace: float | None,
+        distance_km: float | None,
+        duration_sec: float | None,
+    ) -> bool:
+        if (
+            distance_km is None
+            or distance_km < 4
+        ):
+            return False
+
+        if (
+            duration_sec is None
+            or duration_sec < 20 * 60
+        ):
+            return False
+
+        if (
+            laps_count is not None
+            and 3 <= laps_count <= 10
+            and avg_hr is not None
+            and avg_hr >= 145
+        ):
+            return True
+
+        if (
+            pace is not None
+            and pace <= 300
+            and avg_hr is not None
+            and avg_hr >= 145
+        ):
+            return True
+
+        return False
+
+    def _looks_like_easy_run(
+        self,
+        avg_hr: float | None,
+        distance_km: float | None,
+        duration_sec: float | None,
+    ) -> bool:
+        if (
+            distance_km is None
+            or distance_km <= 0
+        ):
+            return False
+
+        if (
+            duration_sec is None
+            or duration_sec < 15 * 60
+        ):
+            return False
+
+        if avg_hr is None:
+            return True
+
+        return avg_hr < 150
+
+    def _unknown(
+        self,
+        warning: str,
+    ) -> dict:
         return {
-            "workout_type": summary.get(
-                "detected_type",
-                "unknown",
-            ),
-            "confidence": summary.get(
-                "confidence",
-                0,
-            ),
-            "classification_method": summary.get(
-                "classification_method",
-                "unknown",
-            ),
-            "warnings": list(
-                summary.get("warnings", [])
-            ),
+            "workout_type": "unknown",
+            "confidence": 0.0,
+            "classification_method": "fallback",
+            "warnings": [
+                warning
+            ],
         }
 
-    def _normalize_sport(
+    def _to_float(
         self,
-        value: str | None,
-    ) -> str:
+        value,
+    ) -> float | None:
         if value is None:
-            return ""
+            return None
 
-        return value.strip().lower()
+        try:
+            return float(value)
+
+        except (TypeError, ValueError):
+            return None
+
+    def _to_int(
+        self,
+        value,
+    ) -> int | None:
+        if value is None:
+            return None
+
+        try:
+            return int(value)
+
+        except (TypeError, ValueError):
+            return None

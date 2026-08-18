@@ -133,3 +133,23 @@ class IntervalsActivitySyncService:
         )
         existing.records_count = incoming.records_count
         existing.laps_count = incoming.laps_count
+
+        existing.activity_name = incoming.activity_name
+        existing.description = incoming.description
+
+        existing.external_type = incoming.external_type
+        existing.source_platform = incoming.source_platform
+
+        existing.training_load = incoming.training_load
+        existing.rpe = incoming.rpe
+        existing.race = incoming.race
+
+        existing.interval_summary = incoming.interval_summary
+
+        existing.declared_workout_type = (
+            incoming.declared_workout_type
+        )
+
+        existing.declared_session_role = (
+            incoming.declared_session_role
+        )
