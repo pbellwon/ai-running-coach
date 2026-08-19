@@ -19,7 +19,11 @@ class PlannedWorkoutEngine:
         structure: Optional[list[dict]] = None,
     ) -> PlannedWorkout:
 
-        intent = WorkoutIntentEngine().classify_from_description(description)
+        classification_text = f"{title} {description}".strip()
+
+        intent = WorkoutIntentEngine().classify_from_description(
+            classification_text
+        )
 
         return PlannedWorkout(
             planned_date=planned_date,

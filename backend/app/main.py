@@ -53,6 +53,9 @@ from app.services.recovery_trend_service import (
 from app.services.training_context_service import (
     TrainingContextService,
 )
+from app.services.training_decision_engine import (
+    TrainingDecisionEngine,
+)
 
 
 
@@ -725,3 +728,134 @@ def training_context_test(
     )
 
     return asdict(context)
+
+@app.get("/decision/test")
+def decision_test(
+    target_date: str,
+    planned_workout_type: str,
+    planned_session_role: str | None = None,
+):
+    recovery = RecoverySnapshotService().build(
+        target_date
+    )
+
+    trend = RecoveryTrendService().build(
+        target_date
+    )
+
+    training_context = (
+        TrainingContextService().build(
+            target_date
+        )
+    )
+
+    decision = TrainingDecisionEngine().decide(
+        recovery=recovery,
+        trend=trend,
+        training_context=training_context,
+        planned_workout_type=(
+            planned_workout_type
+        ),
+        planned_session_role=(
+            planned_session_role
+        ),
+    )
+
+    return asdict(decision)
+
+@app.get("/decision/today-test")
+def decision_today_test(
+    target_date: str,
+):
+    normalized_date = date.fromisoformat(
+        target_date
+    )
+
+    rows = (
+        GoogleSheetsPlanSource()
+        .fetch_rows()
+    )
+
+    planned_workouts = (
+        ExistingPlanImporter()
+        .import_rows(rows)
+    )
+
+    planned_for_day = [
+        workout
+        for workout in planned_workouts
+        if (
+            workout.planned_date
+            == normalized_date
+            and workout.workout_type != "off"
+        )
+    ]
+
+    if not planned_for_day:
+        return {
+            "target_date": target_date,
+            "planned_workout": None,
+            "decision": None,
+            "message": (
+                "No planned workout found "
+                "for this date."
+            ),
+        }
+
+    planned = planned_for_day[0]
+
+    recovery = (
+        RecoverySnapshotService()
+        .build(target_date)
+    )
+
+    trend = (
+        RecoveryTrendService()
+        .build(target_date)
+    )
+
+    training_context = (
+        TrainingContextService()
+        .build(target_date)
+    )
+
+    decision = (
+        TrainingDecisionEngine()
+        .decide(
+            recovery=recovery,
+            trend=trend,
+            training_context=training_context,
+            planned_workout_type=(
+                planned.workout_type
+            ),
+            planned_session_role=(
+                "long_run"
+                if planned.workout_type
+                == "long_run"
+                else None
+            ),
+        )
+    )
+
+    return {
+        "target_date": target_date,
+        "planned_workout": {
+            "title": planned.title,
+            "workout_type": (
+                planned.workout_type
+            ),
+            "description": (
+                planned.description
+            ),
+            "planned_distance_km": (
+                planned.planned_distance_km
+            ),
+            "planned_duration_min": (
+                planned.planned_duration_min
+            ),
+            "priority": (
+                planned.priority
+            ),
+        },
+        "decision": asdict(decision),
+    }
