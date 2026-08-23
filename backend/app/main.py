@@ -56,6 +56,9 @@ from app.services.training_context_service import (
 from app.services.training_decision_engine import (
     TrainingDecisionEngine,
 )
+from app.services.today_recommendation_service import (
+    TodayRecommendationService,
+)
 
 
 
@@ -796,6 +799,7 @@ def decision_today_test(
             "target_date": target_date,
             "planned_workout": None,
             "decision": None,
+            "recommendation": None,
             "message": (
                 "No planned workout found "
                 "for this date."
@@ -831,8 +835,28 @@ def decision_today_test(
             planned_session_role=(
                 "long_run"
                 if planned.workout_type
-                == "long_run"
+                in {
+                    "long_run",
+                    "long_run+progression",
+                }
                 else None
+            ),
+        )
+    )
+
+    recommendation = (
+        TodayRecommendationService()
+        .build(
+            decision=decision,
+            planned_title=planned.title,
+            planned_workout_type=(
+                planned.workout_type
+            ),
+            planned_distance_km=(
+                planned.planned_distance_km
+            ),
+            planned_duration_min=(
+                planned.planned_duration_min
             ),
         )
     )
@@ -858,4 +882,7 @@ def decision_today_test(
             ),
         },
         "decision": asdict(decision),
+        "recommendation": (
+            asdict(recommendation)
+        ),
     }
