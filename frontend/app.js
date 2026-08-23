@@ -651,6 +651,11 @@ function renderTrainingContext(
         "context-strength"
     ).textContent =
         context.strength_sessions ?? 0;
+
+    document.getElementById(
+        "context-cross-training"
+    ).textContent =
+        `${context.cycling_sessions ?? 0} sessions`;
 }
 
 
