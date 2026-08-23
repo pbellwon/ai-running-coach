@@ -59,6 +59,9 @@ from app.services.training_decision_engine import (
 from app.services.today_recommendation_service import (
     TodayRecommendationService,
 )
+from app.services.pacemind_today_service import (
+    PaceMindTodayService,
+)
 
 
 
@@ -886,3 +889,19 @@ def decision_today_test(
             asdict(recommendation)
         ),
     }
+
+@app.get("/today")
+def today(
+    target_date: str | None = None,
+):
+    resolved_date = (
+        target_date
+        if target_date is not None
+        else date.today().isoformat()
+    )
+
+    result = PaceMindTodayService().build(
+        resolved_date
+    )
+
+    return asdict(result)
