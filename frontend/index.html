@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>PaceMind</title>
+
+    <link
+        rel="stylesheet"
+        href="styles.css"
+    >
+</head>
+
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">
+                    PACE MIND
+                </p>
+
+                <h1>
+                    Today
+                </h1>
+
+                <p
+                    id="today-date"
+                    class="muted"
+                >
+                    Loading...
+                </p>
+            </div>
+
+            <div
+                id="overall-status"
+                class="status-badge"
+            >
+                Loading
+            </div>
+        </header>
+
+        <section
+            id="loading-state"
+            class="state-card"
+        >
+            Loading today's training data...
+        </section>
+
+        <section
+            id="error-state"
+            class="state-card hidden"
+        >
+            <h2>
+                PaceMind could not load today's data
+            </h2>
+
+            <p id="error-message"></p>
+        </section>
+
+        <div
+            id="dashboard"
+            class="dashboard hidden"
+        >
+            <section class="card">
+                <p class="section-label">
+                    RECOVERY
+                </p>
+
+                <h2 id="recovery-title">
+                    —
+                </h2>
+
+                <div class="metrics-grid">
+                    <div class="metric">
+                        <span class="metric-label">
+                            HRV
+                        </span>
+
+                        <strong id="hrv-value">
+                            —
+                        </strong>
+
+                        <span
+                            id="hrv-baseline"
+                            class="metric-detail"
+                        >
+                            —
+                        </span>
+                    </div>
+
+                    <div class="metric">
+                        <span class="metric-label">
+                            Resting HR
+                        </span>
+
+                        <strong id="rhr-value">
+                            —
+                        </strong>
+
+                        <span
+                            id="rhr-baseline"
+                            class="metric-detail"
+                        >
+                            —
+                        </span>
+                    </div>
+
+                    <div class="metric">
+                        <span class="metric-label">
+                            Sleep
+                        </span>
+
+                        <strong id="sleep-value">
+                            —
+                        </strong>
+
+                        <span
+                            id="sleep-score"
+                            class="metric-detail"
+                        >
+                            —
+                        </span>
+                    </div>
+
+                    <div class="metric">
+                        <span class="metric-label">
+                            Fatigue
+                        </span>
+
+                        <strong id="fatigue-value">
+                            —
+                        </strong>
+
+                        <span
+                            id="fatigue-detail"
+                            class="metric-detail"
+                        >
+                            —
+                        </span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <p class="section-label">
+                    TODAY'S PLAN
+                </p>
+
+                <h2 id="plan-title">
+                    —
+                </h2>
+
+                <p
+                    id="plan-summary"
+                    class="lead"
+                >
+                    —
+                </p>
+
+                <p
+                    id="plan-description"
+                    class="muted"
+                >
+                    —
+                </p>
+            </section>
+
+            <section
+                id="recommendation-card"
+                class="card recommendation-card"
+            >
+                <p class="section-label">
+                    RECOMMENDATION
+                </p>
+
+                <div
+                    id="decision-badge"
+                    class="decision-badge"
+                >
+                    —
+                </div>
+
+                <h2 id="recommendation-title">
+                    —
+                </h2>
+
+                <p
+                    id="recommendation-summary"
+                    class="lead"
+                >
+                    —
+                </p>
+
+                <div
+                    id="recommendation-volume"
+                    class="recommendation-volume"
+                >
+                </div>
+            </section>
+
+            <section
+                id="completed-card"
+                class="card completed-card hidden"
+            >
+                <p class="section-label">
+                    TODAY'S SESSION
+                </p>
+
+                <div class="completed-badge">
+                    Completed
+                </div>
+
+                <h2 id="completed-title">
+                    Workout completed
+                </h2>
+
+                <p
+                    id="completed-summary"
+                    class="lead"
+                >
+                    —
+                </p>
+
+                <div
+                    id="completed-volume"
+                    class="recommendation-volume"
+                >
+                </div>
+            </section>
+
+            <section
+                id="reasons-card"
+                class="card"
+            >
+                <p
+                    id="reasons-title"
+                    class="section-label"
+                >
+                    WHY?
+                </p>
+
+                <ul
+                    id="reasons-list"
+                    class="reason-list"
+                >
+                </ul>
+            </section>
+
+            <section class="card compact-card">
+                <p class="section-label">
+                    TRAINING CONTEXT
+                </p>
+
+                <div class="context-grid">
+                    <div>
+                        <span>
+                            Running
+                        </span>
+
+                        <strong id="context-running">
+                            —
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>
+                            Quality
+                        </span>
+
+                        <strong id="context-quality">
+                            —
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>
+                            Long runs
+                        </span>
+
+                        <strong id="context-long">
+                            —
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>
+                            Strength
+                        </span>
+
+                        <strong id="context-strength">
+                            —
+                        </strong>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="app.js?v=2"></script>
+</body>
+</html>

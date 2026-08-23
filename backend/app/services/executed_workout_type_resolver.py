@@ -15,7 +15,8 @@ class ExecutedWorkoutTypeResolver:
     4. unknown fallback
 
     Important:
-    declared_session_role is intentionally NOT used here.
+    declared_session_role is intentionally NOT returned as
+    workout_type.
 
     Example:
         "Long tempo"
@@ -23,7 +24,7 @@ class ExecutedWorkoutTypeResolver:
         declared_workout_type = tempo_run
         declared_session_role = long_run
 
-    This resolver returns the physiological/executed workout type.
+    The resolver returns the physiological workout type.
     Session role is handled separately.
     """
 
@@ -165,14 +166,47 @@ class ExecutedWorkoutTypeResolver:
             workout.duration_sec
         )
 
+        declared_session_role = getattr(
+            workout,
+            "declared_session_role",
+            None,
+        )
+
         warnings = [
-            "Classification based only on executed lap pattern."
+            "Classification based only on executed summary data."
         ]
+
+        if declared_session_role == "long_run":
+            if self._looks_like_tempo(
+                laps_count=laps_count,
+                avg_hr=avg_hr,
+                pace=pace,
+                distance_km=distance_km,
+                duration_sec=duration_sec,
+            ):
+                return {
+                    "workout_type": "tempo_run",
+                    "confidence": 0.7,
+                    "classification_method": (
+                        "long_run_summary"
+                    ),
+                    "warnings": warnings,
+                }
+
+            return {
+                "workout_type": "easy_run",
+                "confidence": 0.8,
+                "classification_method": (
+                    "declared_session_role"
+                ),
+                "warnings": [],
+            }
 
         if self._looks_like_vo2max(
             laps_count=laps_count,
             avg_hr=avg_hr,
             max_hr=max_hr,
+            distance_km=distance_km,
             duration_sec=duration_sec,
         ):
             return {
@@ -203,8 +237,8 @@ class ExecutedWorkoutTypeResolver:
                 ),
                 "warnings": warnings
                 + [
-                    "Tempo block detected from "
-                    "consecutive similar laps."
+                    "Tempo effort detected from "
+                    "summary characteristics."
                 ],
             }
 
@@ -217,7 +251,7 @@ class ExecutedWorkoutTypeResolver:
                 "workout_type": "easy_run",
                 "confidence": 0.65,
                 "classification_method": (
-                    "lap_pattern"
+                    "summary_pattern"
                 ),
                 "warnings": warnings,
             }
@@ -234,11 +268,12 @@ class ExecutedWorkoutTypeResolver:
         laps_count: int | None,
         avg_hr: float | None,
         max_hr: float | None,
+        distance_km: float | None,
         duration_sec: float | None,
     ) -> bool:
         if (
             laps_count is None
-            or laps_count < 8
+            or laps_count < 6
         ):
             return False
 
@@ -249,13 +284,24 @@ class ExecutedWorkoutTypeResolver:
             return False
 
         if (
-            max_hr is not None
-            and avg_hr is not None
-            and max_hr - avg_hr >= 12
+            distance_km is not None
+            and distance_km >= 15
         ):
-            return True
+            return False
 
-        return laps_count >= 12
+        if (
+            max_hr is None
+            or avg_hr is None
+        ):
+            return False
+
+        if max_hr - avg_hr < 12:
+            return False
+
+        if avg_hr < 145:
+            return False
+
+        return True
 
     def _looks_like_tempo(
         self,
@@ -340,7 +386,6 @@ class ExecutedWorkoutTypeResolver:
 
         try:
             return float(value)
-
         except (TypeError, ValueError):
             return None
 
@@ -353,6 +398,5 @@ class ExecutedWorkoutTypeResolver:
 
         try:
             return int(value)
-
         except (TypeError, ValueError):
             return None

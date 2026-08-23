@@ -33,6 +33,7 @@ from app.services.automatic_plan_comparison_service import (
 )
 from app.services.weekly_review_service import WeeklyReviewService
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv(".env", override=True)
 from app.integrations.intervals_icu_client import (
@@ -66,6 +67,17 @@ from app.services.pacemind_today_service import (
 
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 Base.metadata.create_all(bind=engine)
 
