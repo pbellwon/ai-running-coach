@@ -45,22 +45,6 @@ class PaceMindTodayService:
             normalized_date
         )
 
-        if planned is None:
-            return PaceMindToday(
-                target_date=target_date,
-                planned_workout=None,
-                recovery=None,
-                recovery_trend=None,
-                training_context=None,
-                decision=None,
-                recommendation=None,
-                status="no_planned_workout",
-                message=(
-                    "No planned workout found "
-                    "for this date."
-                ),
-            )
-
         recovery = (
             RecoverySnapshotService()
             .build(target_date)
@@ -75,6 +59,22 @@ class PaceMindTodayService:
             TrainingContextService()
             .build(target_date)
         )
+
+        if planned is None:
+            return PaceMindToday(
+                target_date=target_date,
+                planned_workout=None,
+                recovery=recovery,
+                recovery_trend=recovery_trend,
+                training_context=training_context,
+                decision=None,
+                recommendation=None,
+                status="no_planned_workout",
+                message=(
+                    "No planned workout found "
+                    "for this date."
+                ),
+            )
 
         planned_summary = PlannedWorkoutSummary(
             title=planned.title,

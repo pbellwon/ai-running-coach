@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+import os
+
+from fastapi import FastAPI, Header, HTTPException
 from app.models.athlete import Athlete, AthleteProfile, AthletePhysiology
 from app.db.database import Base, engine
 from app.db import models
@@ -9,7 +11,7 @@ from app.analysis.efficiency_analyzer import EfficiencyAnalyzer
 from app.analysis.cardiac_drift_analyzer import CardiacDriftAnalyzer
 from app.analysis.pace_stability_analyzer import PaceStabilityAnalyzer
 from app.analysis.cadence_analyzer import CadenceAnalyzer
-from datetime import date
+from datetime import date, timedelta
 from app.models.goal import Goal
 from app.engine.goal_engine import GoalEngine
 from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
@@ -63,6 +65,9 @@ from app.services.today_recommendation_service import (
 from app.services.pacemind_today_service import (
     PaceMindTodayService,
 )
+from app.services.sync_state_service import (
+    SyncStateService,
+)
 
 
 
@@ -73,6 +78,7 @@ app.add_middleware(
     allow_origins=[
         "http://127.0.0.1:5500",
         "http://localhost:5500",
+        "https://pacemind-503211.web.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -716,6 +722,114 @@ def intervals_wellness_sync_test(
         oldest=oldest,
         newest=newest,
     )
+
+@app.post("/sync/daily")
+def daily_sync(
+    x_sync_key: str | None = Header(
+        default=None,
+        alias="X-Sync-Key",
+    ),
+):
+    expected_key = os.getenv("SYNC_API_KEY")
+
+    if (
+        not expected_key
+        or x_sync_key != expected_key
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+        )
+
+    today = date.today()
+    oldest = today - timedelta(days=3)
+
+    oldest_str = oldest.isoformat()
+    newest_str = today.isoformat()
+
+    wellness_result = (
+        IntervalsWellnessSyncService()
+        .sync(
+            oldest=oldest_str,
+            newest=newest_str,
+        )
+    )
+
+    activities_result = (
+        IntervalsActivitySyncService()
+        .sync(
+            oldest=oldest_str,
+            newest=newest_str,
+        )
+    )
+
+    return {
+        "status": "ok",
+        "oldest": oldest_str,
+        "newest": newest_str,
+        "wellness": wellness_result,
+        "activities": activities_result,
+    }
+
+@app.post("/sync/refresh")
+def manual_sync_refresh():
+    sync_name = "manual_refresh"
+    cooldown_minutes = 5
+
+    can_run, retry_after_seconds = (
+        SyncStateService()
+        .can_run(
+            sync_name=sync_name,
+            cooldown_minutes=cooldown_minutes,
+        )
+    )
+
+    if not can_run:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "message": (
+                    "Refresh was performed recently."
+                ),
+                "retry_after_seconds": (
+                    retry_after_seconds
+                ),
+            },
+        )
+
+    today = date.today()
+    oldest = today - timedelta(days=3)
+
+    oldest_str = oldest.isoformat()
+    newest_str = today.isoformat()
+
+    wellness_result = (
+        IntervalsWellnessSyncService()
+        .sync(
+            oldest=oldest_str,
+            newest=newest_str,
+        )
+    )
+
+    activities_result = (
+        IntervalsActivitySyncService()
+        .sync(
+            oldest=oldest_str,
+            newest=newest_str,
+        )
+    )
+
+    SyncStateService().mark_success(
+        sync_name=sync_name
+    )
+
+    return {
+        "status": "ok",
+        "oldest": oldest_str,
+        "newest": newest_str,
+        "wellness": wellness_result,
+        "activities": activities_result,
+    }
 
 @app.get("/recovery/snapshot-test")
 def recovery_snapshot_test(

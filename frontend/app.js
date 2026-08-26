@@ -1,11 +1,28 @@
 const API_BASE_URL =
-    "http://127.0.0.1:8000";
+    "https://pacemind-backend-1034229547127.europe-central2.run.app";
 
 
 document.addEventListener(
     "DOMContentLoaded",
     () => {
         loadToday();
+    }
+);
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        const refreshButton =
+            document.getElementById(
+                "refresh-button"
+            );
+
+        refreshButton.addEventListener(
+            "click",
+            () => {
+                refreshData();
+            }
+        );
     }
 );
 
@@ -55,6 +72,7 @@ async function loadToday() {
         if (
             data.status !== "ready"
             && data.status !== "completed"
+            && data.status !== "no_planned_workout"
         ) {
             throw new Error(
                 data.message
@@ -87,6 +105,69 @@ async function loadToday() {
     }
 }
 
+async function refreshData() {
+    const refreshButton =
+        document.getElementById(
+            "refresh-button"
+        );
+
+    const originalText =
+        refreshButton.textContent;
+
+    refreshButton.disabled = true;
+    refreshButton.textContent =
+        "Refreshing...";
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/sync/refresh`,
+            {
+                method: "POST",
+            }
+        );
+
+        if (response.status === 429) {
+            const data =
+                await response.json();
+
+            const seconds =
+                data
+                    .detail
+                    ?.retry_after_seconds
+                ?? 0;
+
+            const minutes =
+                Math.ceil(
+                    seconds / 60
+                );
+
+            alert(
+                `Data was refreshed recently. Try again in about ${minutes} min.`
+            );
+
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                `Refresh failed: ${response.status}`
+            );
+        }
+
+        await loadToday();
+
+    } catch (error) {
+        alert(
+            error.message
+            || "Could not refresh data."
+        );
+    } finally {
+        refreshButton.disabled = false;
+        refreshButton.textContent =
+            originalText;
+    }
+}
+
 
 function renderToday(data) {
     renderDate(
@@ -109,6 +190,16 @@ function renderToday(data) {
         data.status === "completed"
     ) {
         renderCompleted(
+            data
+        );
+
+        return;
+    }
+
+    if (
+        data.status === "no_planned_workout"
+    ) {
+        renderNoPlannedWorkout(
             data
         );
 
@@ -165,7 +256,7 @@ function renderRecovery(
         );
 
     const status =
-        recovery.overall_status
+        recovery?.overall_status
         || "unknown";
 
     overallStatus.textContent =
@@ -186,27 +277,27 @@ function renderRecovery(
     renderMetric(
         "hrv-value",
         "hrv-baseline",
-        recovery.hrv?.current,
-        recovery.hrv?.baseline,
+        recovery?.hrv?.current,
+        recovery?.hrv?.baseline,
         null
     );
 
     renderMetric(
         "rhr-value",
         "rhr-baseline",
-        recovery.resting_hr?.current,
-        recovery.resting_hr?.baseline,
+        recovery?.resting_hr?.current,
+        recovery?.resting_hr?.baseline,
         " bpm"
     );
 
     const sleepSeconds =
         recovery
-            .sleep_duration
+            ?.sleep_duration
             ?.current;
 
     const sleepBaselineSeconds =
         recovery
-            .sleep_duration
+            ?.sleep_duration
             ?.baseline;
 
     document.getElementById(
@@ -218,7 +309,7 @@ function renderRecovery(
 
     const sleepScore =
         recovery
-            .sleep_score
+            ?.sleep_score
             ?.current;
 
     const baselineText =
@@ -246,15 +337,15 @@ function renderRecovery(
         "fatigue-value"
     ).textContent =
         formatLabel(
-            trend.fatigue_signal
+            trend?.fatigue_signal
             || "unknown"
         );
 
     document.getElementById(
         "fatigue-detail"
     ).textContent =
-        `${trend.available_days ?? 0}`
-        + ` / ${trend.window_days ?? 0}`
+        `${trend?.available_days ?? 0}`
+        + ` / ${trend?.window_days ?? 0}`
         + " days";
 }
 
@@ -333,12 +424,39 @@ function renderPlan(
         "plan-summary"
     ).textContent =
         summaryParts.join(" · ")
-        || "No workout details";
+        || "No workout planned for today";
 
     document.getElementById(
         "plan-description"
     ).textContent =
         plan?.description || "";
+}
+
+
+function renderNoPlannedWorkout(
+    data
+) {
+    const recommendationCard =
+        document.getElementById(
+            "recommendation-card"
+        );
+
+    const completedCard =
+        document.getElementById(
+            "completed-card"
+        );
+
+    recommendationCard.classList.add(
+        "hidden"
+    );
+
+    completedCard.classList.add(
+        "hidden"
+    );
+
+    renderCurrentRecoveryReasons(
+        data
+    );
 }
 
 
@@ -515,13 +633,13 @@ function renderCompleted(
         );
     }
 
-    renderCompletedReasons(
+    renderCurrentRecoveryReasons(
         data
     );
 }
 
 
-function renderCompletedReasons(
+function renderCurrentRecoveryReasons(
     data
 ) {
     const reasonsTitle =
@@ -635,27 +753,27 @@ function renderTrainingContext(
     document.getElementById(
         "context-running"
     ).textContent =
-        `${context.running_distance_km ?? 0} km`;
+        `${context?.running_distance_km ?? 0} km`;
 
     document.getElementById(
         "context-quality"
     ).textContent =
-        context.quality_sessions ?? 0;
+        context?.quality_sessions ?? 0;
 
     document.getElementById(
         "context-long"
     ).textContent =
-        context.long_run_sessions ?? 0;
+        context?.long_run_sessions ?? 0;
 
     document.getElementById(
         "context-strength"
     ).textContent =
-        context.strength_sessions ?? 0;
+        context?.strength_sessions ?? 0;
 
     document.getElementById(
         "context-cross-training"
     ).textContent =
-        `${context.cycling_sessions ?? 0} sessions`;
+        `${context?.cycling_sessions ?? 0} sessions`;
 }
 
 

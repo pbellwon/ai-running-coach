@@ -60,11 +60,43 @@ def test_no_planned_workout_returns_no_plan_status(monkeypatch):
         lambda target_date: None,
     )
 
+    class FakeRecoveryService:
+        def build(self, target_date):
+            return "recovery"
+
+    class FakeTrendService:
+        def build(self, target_date):
+            return "trend"
+
+    class FakeContextService:
+        def build(self, target_date):
+            return make_context()
+
+    monkeypatch.setattr(
+        "app.services.pacemind_today_service.RecoverySnapshotService",
+        FakeRecoveryService,
+    )
+
+    monkeypatch.setattr(
+        "app.services.pacemind_today_service.RecoveryTrendService",
+        FakeTrendService,
+    )
+
+    monkeypatch.setattr(
+        "app.services.pacemind_today_service.TrainingContextService",
+        FakeContextService,
+    )
+
     result = service.build("2026-08-01")
 
     assert result.status == "no_planned_workout"
     assert result.planned_workout is None
-    assert result.recovery is None
+    assert result.recovery == "recovery"
+    assert result.recovery_trend == "trend"
+    assert isinstance(
+        result.training_context,
+        TrainingContext,
+    )
     assert result.decision is None
     assert result.recommendation is None
 

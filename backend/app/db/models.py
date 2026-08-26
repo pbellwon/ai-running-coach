@@ -82,6 +82,24 @@ class DailyAthleteStateDB(Base):
     spo2 = Column(Float)
 
 
+class SyncStateDB(Base):
+    __tablename__ = "sync_state"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    sync_name = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    last_success_at = Column(
+        DateTime,
+        nullable=False,
+    )
+
+
 class LapDB(Base):
     __tablename__ = "laps"
 
