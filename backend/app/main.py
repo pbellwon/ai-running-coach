@@ -1,8 +1,10 @@
 import os
 
 from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
 from app.models.athlete import Athlete, AthleteProfile, AthletePhysiology
-from app.db.database import Base, engine
+from app.db.database import Base, SessionLocal, engine
+from app.db.models import LapDB, WorkoutDB
 from app.db import models
 from app.services.fit_importer import FITImporter
 from app.analysis.statistics_engine import StatisticsEngine
@@ -11,7 +13,7 @@ from app.analysis.efficiency_analyzer import EfficiencyAnalyzer
 from app.analysis.cardiac_drift_analyzer import CardiacDriftAnalyzer
 from app.analysis.pace_stability_analyzer import PaceStabilityAnalyzer
 from app.analysis.cadence_analyzer import CadenceAnalyzer
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from app.models.goal import Goal
 from app.engine.goal_engine import GoalEngine
 from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
@@ -69,6 +71,51 @@ from app.services.sync_state_service import (
     SyncStateService,
 )
 
+
+class HistoricalLapPayload(BaseModel):
+    lap_number: int
+    distance_m: float | None = None
+    elapsed_time_sec: float | None = None
+    avg_hr: float | None = None
+    max_hr: float | None = None
+
+
+class HistoricalWorkoutPayload(BaseModel):
+    source_file: str
+    start_time: datetime
+
+    sport: str | None = None
+    distance_km: float | None = None
+    duration_sec: float | None = None
+    avg_hr: float | None = None
+    max_hr: float | None = None
+    avg_pace_sec_per_km: float | None = None
+
+    records_count: int | None = None
+    laps_count: int | None = None
+
+    activity_name: str | None = None
+    description: str | None = None
+    external_type: str | None = None
+    source_platform: str | None = None
+
+    training_load: float | None = None
+    rpe: float | None = None
+    race: bool | None = None
+
+    interval_summary: str | None = None
+    declared_workout_type: str | None = None
+    declared_session_role: str | None = None
+
+    laps: list[HistoricalLapPayload] = Field(
+        default_factory=list
+    )
+
+
+class HistoricalBackfillPayload(BaseModel):
+    workouts: list[HistoricalWorkoutPayload] = Field(
+        default_factory=list
+    )
 
 
 app = FastAPI()
@@ -723,6 +770,151 @@ def intervals_wellness_sync_test(
         newest=newest,
     )
 
+
+@app.post("/admin/historical-backfill")
+def historical_backfill(
+    payload: HistoricalBackfillPayload,
+    x_sync_key: str | None = Header(
+        default=None,
+        alias="X-Sync-Key",
+    ),
+):
+    expected_key = os.getenv("SYNC_API_KEY")
+
+    if (
+        not expected_key
+        or x_sync_key != expected_key
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+        )
+
+    cutoff = datetime(
+        2025,
+        2,
+        8,
+    )
+
+    if not payload.workouts:
+        return {
+            "status": "ok",
+            "created_workouts": 0,
+            "created_laps": 0,
+            "skipped_existing": 0,
+            "rejected": 0,
+        }
+
+    db = SessionLocal()
+
+    created_workouts = 0
+    created_laps = 0
+    skipped_existing = 0
+    rejected = 0
+
+    seen_source_files: set[str] = set()
+
+    try:
+        for item in payload.workouts:
+            source_file = item.source_file.strip()
+
+            if (
+                not source_file
+                or item.start_time >= cutoff
+            ):
+                rejected += 1
+                continue
+
+            if source_file in seen_source_files:
+                skipped_existing += 1
+                continue
+
+            seen_source_files.add(
+                source_file
+            )
+
+            existing = (
+                db.query(WorkoutDB)
+                .filter(
+                    WorkoutDB.source_file
+                    == source_file
+                )
+                .first()
+            )
+
+            if existing is not None:
+                skipped_existing += 1
+                continue
+
+            db.add(
+                WorkoutDB(
+                    source_file=source_file,
+                    start_time=item.start_time,
+                    sport=item.sport,
+                    distance_km=item.distance_km,
+                    duration_sec=item.duration_sec,
+                    avg_hr=item.avg_hr,
+                    max_hr=item.max_hr,
+                    avg_pace_sec_per_km=(
+                        item.avg_pace_sec_per_km
+                    ),
+                    records_count=item.records_count,
+                    laps_count=item.laps_count,
+                    activity_name=item.activity_name,
+                    description=item.description,
+                    external_type=item.external_type,
+                    source_platform=(
+                        item.source_platform
+                    ),
+                    training_load=item.training_load,
+                    rpe=item.rpe,
+                    race=item.race,
+                    interval_summary=(
+                        item.interval_summary
+                    ),
+                    declared_workout_type=(
+                        item.declared_workout_type
+                    ),
+                    declared_session_role=(
+                        item.declared_session_role
+                    ),
+                )
+            )
+
+            for lap in item.laps:
+                db.add(
+                    LapDB(
+                        workout_file=source_file,
+                        lap_number=lap.lap_number,
+                        distance_m=lap.distance_m,
+                        elapsed_time_sec=(
+                            lap.elapsed_time_sec
+                        ),
+                        avg_hr=lap.avg_hr,
+                        max_hr=lap.max_hr,
+                    )
+                )
+                created_laps += 1
+
+            created_workouts += 1
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
+
+    return {
+        "status": "ok",
+        "created_workouts": created_workouts,
+        "created_laps": created_laps,
+        "skipped_existing": skipped_existing,
+        "rejected": rejected,
+    }
+
 @app.post("/sync/daily")
 def daily_sync(
     x_sync_key: str | None = Header(
@@ -857,6 +1049,25 @@ def training_context_test(
 ):
     context = TrainingContextService().build(
         target_date
+    )
+
+    return asdict(context)
+
+@app.get("/training/overview")
+def training_overview(
+    target_date: str | None = None,
+):
+    resolved_date = (
+        target_date
+        or date.today().isoformat()
+    )
+
+    context = (
+        TrainingContextService()
+        .build(
+            target_date=resolved_date,
+            window_days=28,
+        )
     )
 
     return asdict(context)
@@ -1031,3 +1242,4 @@ def today(
     )
 
     return asdict(result)
+

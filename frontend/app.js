@@ -5,9 +5,10 @@ const API_BASE_URL =
 document.addEventListener(
     "DOMContentLoaded",
     () => {
-        loadToday();
+        loadDashboard();
     }
 );
+
 
 document.addEventListener(
     "DOMContentLoaded",
@@ -25,6 +26,14 @@ document.addEventListener(
         );
     }
 );
+
+
+async function loadDashboard() {
+    await Promise.all([
+        loadToday(),
+        loadTrainingOverview(),
+    ]);
+}
 
 
 async function loadToday() {
@@ -89,6 +98,7 @@ async function loadToday() {
         dashboard.classList.remove(
             "hidden"
         );
+
     } catch (error) {
         loadingState.classList.add(
             "hidden"
@@ -104,6 +114,35 @@ async function loadToday() {
         );
     }
 }
+
+
+async function loadTrainingOverview() {
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/training/overview`
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Training overview returned ${response.status}`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        renderTrainingOverview(
+            data
+        );
+
+    } catch (error) {
+        console.error(
+            "Could not load training overview:",
+            error
+        );
+    }
+}
+
 
 async function refreshData() {
     const refreshButton =
@@ -154,13 +193,14 @@ async function refreshData() {
             );
         }
 
-        await loadToday();
+        await loadDashboard();
 
     } catch (error) {
         alert(
             error.message
             || "Could not refresh data."
         );
+
     } finally {
         refreshButton.disabled = false;
         refreshButton.textContent =
@@ -756,6 +796,11 @@ function renderTrainingContext(
         `${context?.running_distance_km ?? 0} km`;
 
     document.getElementById(
+        "context-running-sessions"
+    ).textContent =
+        context?.running_sessions ?? 0;
+
+    document.getElementById(
         "context-quality"
     ).textContent =
         context?.quality_sessions ?? 0;
@@ -774,6 +819,95 @@ function renderTrainingContext(
         "context-cross-training"
     ).textContent =
         `${context?.cycling_sessions ?? 0} sessions`;
+
+    document.getElementById(
+        "context-total-time"
+    ).textContent =
+        formatTrainingTime(
+            context?.total_training_min
+        );
+}
+
+
+function renderTrainingOverview(
+    context
+) {
+    document.getElementById(
+        "overview-running"
+    ).textContent =
+        `${context?.running_distance_km ?? 0} km`;
+
+    document.getElementById(
+        "overview-running-sessions"
+    ).textContent =
+        context?.running_sessions ?? 0;
+
+    document.getElementById(
+        "overview-easy"
+    ).textContent =
+        context?.easy_sessions ?? 0;
+
+    document.getElementById(
+        "overview-quality"
+    ).textContent =
+        context?.quality_sessions ?? 0;
+
+    document.getElementById(
+        "overview-long"
+    ).textContent =
+        context?.long_run_sessions ?? 0;
+
+    document.getElementById(
+        "overview-strength"
+    ).textContent =
+        context?.strength_sessions ?? 0;
+
+    document.getElementById(
+        "overview-cross-training"
+    ).textContent =
+        `${context?.cycling_sessions ?? 0} sessions`;
+
+    document.getElementById(
+        "overview-total-time"
+    ).textContent =
+        formatTrainingTime(
+            context?.total_training_min
+        );
+}
+
+
+function formatTrainingTime(
+    minutes
+) {
+    if (
+        minutes == null
+    ) {
+        return "—";
+    }
+
+    const totalMinutes =
+        Math.round(
+            minutes
+        );
+
+    const hours =
+        Math.floor(
+            totalMinutes / 60
+        );
+
+    const remainingMinutes =
+        totalMinutes % 60;
+
+    return (
+        `${hours}h ${
+            String(
+                remainingMinutes
+            ).padStart(
+                2,
+                "0"
+            )
+        }m`
+    );
 }
 
 

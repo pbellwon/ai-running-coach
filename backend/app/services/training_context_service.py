@@ -22,8 +22,11 @@ class TrainingContextService:
     Raw WorkoutDB activities are converted into logical sessions
     before they are summarized.
 
-    Main window:
+    Default main window:
     - seven calendar days, including target_date.
+
+    Custom window:
+    - may be provided through window_days.
 
     Short-term window:
     - final 48 hours of the main window.
@@ -42,6 +45,8 @@ class TrainingContextService:
 
     WINDOW_DAYS = 7
     RECENT_HOURS = 48
+    LONG_RUN_MIN_DISTANCE_KM = 15.0
+    LONG_RUN_MIN_DURATION_MIN = 80.0
 
     EASY_TYPES = {
         "easy_run",
@@ -84,15 +89,27 @@ class TrainingContextService:
     def build(
         self,
         target_date: date | datetime | str,
+        window_days: int | None = None,
     ) -> TrainingContext:
         normalized_date = self._normalize_date(
             target_date
         )
 
+        effective_window_days = (
+            window_days
+            if window_days is not None
+            else self.WINDOW_DAYS
+        )
+
+        if effective_window_days < 1:
+            raise ValueError(
+                "window_days must be at least 1."
+            )
+
         window_start = (
             normalized_date
             - timedelta(
-                days=self.WINDOW_DAYS - 1
+                days=effective_window_days - 1
             )
         )
 
@@ -122,6 +139,7 @@ class TrainingContextService:
             declared_role_by_source_file=(
                 declared_role_by_source_file
             ),
+            window_days=effective_window_days,
         )
 
     def summarize(
@@ -132,10 +150,22 @@ class TrainingContextService:
         declared_role_by_source_file: (
             dict[str, str] | None
         ) = None,
+        window_days: int | None = None,
     ) -> TrainingContext:
         normalized_date = self._normalize_date(
             target_date
         )
+
+        effective_window_days = (
+            window_days
+            if window_days is not None
+            else self.WINDOW_DAYS
+        )
+
+        if effective_window_days < 1:
+            raise ValueError(
+                "window_days must be at least 1."
+            )
 
         declared_role_by_source_file = (
             declared_role_by_source_file
@@ -274,7 +304,7 @@ class TrainingContextService:
 
         return TrainingContext(
             target_date=normalized_date,
-            window_days=self.WINDOW_DAYS,
+            window_days=effective_window_days,
 
             source_activities_count=(
                 source_activities_count
@@ -381,16 +411,14 @@ class TrainingContextService:
             dict[str, str]
         ),
     ) -> bool:
-        # Compatibility with sessions that may already
-        # have long_run as their workout_type.
         if (
             session.workout_type
             in self.LONG_RUN_TYPES
         ):
             return True
 
-        # Current Intervals.icu approach:
-        # workout_type and session_role are independent.
+        has_declared_role = False
+
         for source_file in session.source_files:
             role = (
                 declared_role_by_source_file.get(
@@ -398,8 +426,37 @@ class TrainingContextService:
                 )
             )
 
+            if role is not None:
+                has_declared_role = True
+
             if role == "long_run":
                 return True
+
+        # Historical fallback:
+        # older FIT workouts often have no declared_session_role.
+        # Long run is a structural role, independent of intensity,
+        # so any running session may qualify.
+        if (
+            not has_declared_role
+            and self._is_running_session(
+                session
+            )
+            and (
+                (
+                    session.total_distance_km
+                    or 0
+                )
+                >= self.LONG_RUN_MIN_DISTANCE_KM
+            )
+            and (
+                (
+                    session.total_duration_min
+                    or 0
+                )
+                >= self.LONG_RUN_MIN_DURATION_MIN
+            )
+        ):
+            return True
 
         return False
 
