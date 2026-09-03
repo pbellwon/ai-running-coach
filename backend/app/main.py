@@ -70,6 +70,9 @@ from app.services.pacemind_today_service import (
 from app.services.sync_state_service import (
     SyncStateService,
 )
+from app.services.goal_progress_service import (
+    GoalProgressService,
+)
 
 
 class HistoricalLapPayload(BaseModel):
@@ -285,6 +288,40 @@ def goal_test():
     engine = GoalEngine()
 
     return engine.evaluate(goal)
+
+@app.get("/goal/progress")
+def goal_progress(
+    target_date: str | None = None,
+):
+    resolved_date = (
+        target_date
+        or date.today().isoformat()
+    )
+
+    goal = Goal(
+        goal_type="race_time",
+        distance_km=10,
+        target_time_sec=2310,
+        target_date=date(
+            2026,
+            10,
+            1,
+        ),
+        priority="A",
+        notes=(
+            "Target 38:30 for 10K."
+        ),
+    )
+
+    progress = (
+        GoalProgressService()
+        .build(
+            goal=goal,
+            target_date=resolved_date,
+        )
+    )
+
+    return asdict(progress)
 
 @app.get("/goal/gap-test")
 def goal_gap_test():
@@ -770,6 +807,90 @@ def intervals_wellness_sync_test(
         newest=newest,
     )
 
+@app.post("/admin/intervals-backfill")
+def intervals_backfill(
+    oldest: str,
+    newest: str,
+    x_sync_key: str | None = Header(
+        default=None,
+        alias="X-Sync-Key",
+    ),
+):
+    expected_key = os.getenv("SYNC_API_KEY")
+
+    if (
+        not expected_key
+        or x_sync_key != expected_key
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized",
+        )
+
+    try:
+        oldest_date = date.fromisoformat(
+            oldest
+        )
+        newest_date = date.fromisoformat(
+            newest
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "oldest and newest must use "
+                "YYYY-MM-DD format"
+            ),
+        )
+
+    if newest_date < oldest_date:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "newest must be on or after oldest"
+            ),
+        )
+
+    max_window_days = 31
+
+    if (
+        newest_date - oldest_date
+    ).days > max_window_days:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Backfill window cannot exceed "
+                "31 days."
+            ),
+        )
+
+    source_boundary = date(
+        2025,
+        2,
+        8,
+    )
+
+    if oldest_date < source_boundary:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Intervals backfill cannot start "
+                "before 2025-02-08."
+            ),
+        )
+
+    result = (
+        IntervalsActivitySyncService()
+        .sync(
+            oldest=oldest_date,
+            newest=newest_date,
+        )
+    )
+
+    return {
+        "status": "ok",
+        "backfill": result,
+    }
 
 @app.post("/admin/historical-backfill")
 def historical_backfill(
