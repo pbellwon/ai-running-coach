@@ -91,9 +91,8 @@ class CompositeSessionBuilder:
         sessions = [
             self._build_session(
                 components=group,
-                session_index=index,
             )
-            for index, group in enumerate(groups, start=1)
+            for group in groups
         ]
 
         return sessions
@@ -271,7 +270,6 @@ class CompositeSessionBuilder:
     def _build_session(
         self,
         components: list[ExecutedSessionComponent],
-        session_index: int,
     ) -> ExecutedSession:
         if not components:
             raise ValueError(
@@ -324,9 +322,8 @@ class CompositeSessionBuilder:
             for component in components
         )
 
-        session_id = (
-            f"{start_time.date().isoformat()}"
-            f"-session-{session_index}"
+        session_id = self._build_session_id(
+            components
         )
 
         return ExecutedSession(
@@ -343,6 +340,31 @@ class CompositeSessionBuilder:
             total_distance_km=total_distance_km,
             total_duration_min=total_duration_min,
             warnings=warnings,
+        )
+
+    def _build_session_id(
+        self,
+        components: list[ExecutedSessionComponent],
+    ) -> str:
+        source_files = sorted(
+            component.workout_file
+            for component in components
+            if component.workout_file
+        )
+
+        if source_files:
+            return (
+                "session:"
+                + "|".join(source_files)
+            )
+
+        start_time = min(
+            component.start_time
+            for component in components
+        )
+
+        return (
+            f"session:{start_time.isoformat()}"
         )
 
     def _assign_component_roles(

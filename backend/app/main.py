@@ -73,6 +73,12 @@ from app.services.sync_state_service import (
 from app.services.goal_progress_service import (
     GoalProgressService,
 )
+from app.services.workout_feedback_service import (
+    WorkoutFeedbackService,
+)
+from app.services.athlete_memory_service import (
+    AthleteMemoryService,
+)
 
 
 class HistoricalLapPayload(BaseModel):
@@ -118,6 +124,54 @@ class HistoricalWorkoutPayload(BaseModel):
 class HistoricalBackfillPayload(BaseModel):
     workouts: list[HistoricalWorkoutPayload] = Field(
         default_factory=list
+    )
+
+
+class WorkoutFeedbackPayload(BaseModel):
+    session_id: str = Field(
+        min_length=1,
+    )
+
+    perceived_effort: float | None = Field(
+        default=None,
+        ge=0,
+        le=10,
+    )
+
+    execution_feeling: str | None = None
+
+    comment: str | None = None
+
+
+class AthleteMemoryCreatePayload(BaseModel):
+    category: str = Field(
+        min_length=1,
+    )
+
+    memory_text: str = Field(
+        min_length=1,
+    )
+
+    confidence: float | None = Field(
+        default=1.0,
+        ge=0,
+        le=1,
+    )
+
+
+class AthleteMemoryUpdatePayload(BaseModel):
+    category: str = Field(
+        min_length=1,
+    )
+
+    memory_text: str = Field(
+        min_length=1,
+    )
+
+    confidence: float | None = Field(
+        default=1.0,
+        ge=0,
+        le=1,
     )
 
 
@@ -1347,6 +1401,123 @@ def decision_today_test(
             asdict(recommendation)
         ),
     }
+
+@app.post("/feedback/workout")
+def upsert_workout_feedback(
+    payload: WorkoutFeedbackPayload,
+):
+    allowed_feelings = {
+        "too_easy",
+        "on_target",
+        "too_hard",
+    }
+
+    if (
+        payload.execution_feeling is not None
+        and payload.execution_feeling
+        not in allowed_feelings
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "execution_feeling must be one of: "
+                "too_easy, on_target, too_hard"
+            ),
+        )
+
+    result = WorkoutFeedbackService().upsert(
+        session_id=payload.session_id,
+        perceived_effort=(
+            payload.perceived_effort
+        ),
+        execution_feeling=(
+            payload.execution_feeling
+        ),
+        comment=payload.comment,
+    )
+
+    return asdict(result)
+
+
+@app.get("/feedback/workout/{session_id}")
+def get_workout_feedback(
+    session_id: str,
+):
+    result = WorkoutFeedbackService().get(
+        session_id=session_id,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Workout feedback not found.",
+        )
+
+    return asdict(result)
+
+
+@app.post("/memory")
+def create_athlete_memory(
+    payload: AthleteMemoryCreatePayload,
+):
+    result = AthleteMemoryService().create(
+        category=payload.category.strip(),
+        memory_text=payload.memory_text.strip(),
+        source="athlete",
+        confidence=payload.confidence,
+    )
+
+    return asdict(result)
+
+
+@app.get("/memory")
+def list_athlete_memory():
+    result = AthleteMemoryService().list_active()
+
+    return [
+        asdict(item)
+        for item in result
+    ]
+
+
+@app.patch("/memory/{memory_id}")
+def update_athlete_memory(
+    memory_id: int,
+    payload: AthleteMemoryUpdatePayload,
+):
+    result = AthleteMemoryService().update(
+        memory_id=memory_id,
+        category=payload.category.strip(),
+        memory_text=payload.memory_text.strip(),
+        source="athlete",
+        confidence=payload.confidence,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Athlete memory not found.",
+        )
+
+    return asdict(result)
+
+
+@app.post("/memory/{memory_id}/deactivate")
+def deactivate_athlete_memory(
+    memory_id: int,
+):
+    result = AthleteMemoryService().deactivate(
+        memory_id=memory_id,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Athlete memory not found.",
+        )
+
+    return asdict(result)
+
 
 @app.get("/today")
 def today(

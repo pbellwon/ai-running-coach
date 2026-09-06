@@ -138,3 +138,80 @@ class RecordDB(Base):
     cadence = Column(Float)
 
     speed = Column(Float)
+
+
+class WorkoutFeedbackDB(Base):
+    __tablename__ = "workout_feedback"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    session_id = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    perceived_effort = Column(Float)
+
+    execution_feeling = Column(String)
+
+    comment = Column(Text)
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+    )
+
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+    )
+
+
+class AthleteMemoryDB(Base):
+    __tablename__ = "athlete_memory"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    category = Column(
+        String,
+        nullable=False,
+        index=True,
+    )
+
+    memory_text = Column(
+        Text,
+        nullable=False,
+    )
+
+    source = Column(
+        String,
+        nullable=False,
+        index=True,
+    )
+
+    confidence = Column(Float)
+
+    is_active = Column(
+        Boolean,
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+    )
+
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+    )

@@ -269,3 +269,79 @@ def test_does_not_merge_two_substantial_easy_runs():
     )
 
     assert len(sessions) == 2
+
+def test_session_id_is_stable_when_earlier_independent_session_is_added():
+    target = make_workout(
+        source_file="target.fit",
+        start_time=datetime(
+            2025,
+            6,
+            7,
+            17,
+            0,
+        ),
+        duration_min=50,
+        distance_km=9,
+    )
+
+    earlier = make_workout(
+        source_file="earlier.fit",
+        start_time=datetime(
+            2025,
+            6,
+            7,
+            7,
+            0,
+        ),
+        duration_min=45,
+        distance_km=8,
+    )
+
+    resolver = FakeResolver(
+        {
+            "target.fit": {
+                "workout_type": "easy_run",
+                "confidence": 0.65,
+                "classification_method": "lap_pattern",
+                "warnings": [],
+            },
+            "earlier.fit": {
+                "workout_type": "easy_run",
+                "confidence": 0.65,
+                "classification_method": "lap_pattern",
+                "warnings": [],
+            },
+        }
+    )
+
+    builder = CompositeSessionBuilder(
+        resolver=resolver
+    )
+
+    without_earlier = builder.build(
+        [target]
+    )
+
+    with_earlier = builder.build(
+        [
+            earlier,
+            target,
+        ]
+    )
+
+    target_without_earlier = without_earlier[0]
+
+    target_with_earlier = next(
+        session
+        for session in with_earlier
+        if any(
+            component.workout_file
+            == "target.fit"
+            for component in session.components
+        )
+    )
+
+    assert (
+        target_without_earlier.session_id
+        == target_with_earlier.session_id
+    )
