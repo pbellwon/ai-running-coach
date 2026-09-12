@@ -32,6 +32,7 @@ async function loadDashboard() {
     await Promise.all([
         loadToday(),
         loadTrainingOverview(),
+        loadRecentWorkouts(),
     ]);
 }
 
@@ -873,6 +874,393 @@ function renderTrainingOverview(
         formatTrainingTime(
             context?.total_training_min
         );
+}
+
+
+async function loadRecentWorkouts() {
+    const container =
+        document.getElementById(
+            "recent-workouts-list"
+        );
+
+    if (!container) {
+        return;
+    }
+
+    container.innerHTML = `
+        <p class="recent-workouts-state">
+            Loading recent workouts...
+        </p>
+    `;
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/workouts/recent-reviews?limit=3`
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Recent workouts returned ${response.status}`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        renderRecentWorkouts(
+            data.items || []
+        );
+
+    } catch (error) {
+        console.error(
+            "Could not load recent workouts:",
+            error
+        );
+
+        container.innerHTML = `
+            <p class="recent-workouts-state recent-workouts-error">
+                Recent workouts are unavailable.
+            </p>
+        `;
+    }
+}
+
+
+function renderRecentWorkouts(
+    items
+) {
+    const container =
+        document.getElementById(
+            "recent-workouts-list"
+        );
+
+    container.innerHTML = "";
+
+    if (
+        !items
+        || items.length === 0
+    ) {
+        container.innerHTML = `
+            <p class="recent-workouts-state">
+                No recent workouts available.
+            </p>
+        `;
+
+        return;
+    }
+
+    items.forEach(
+        (item) => {
+            container.appendChild(
+                createRecentWorkoutCard(
+                    item
+                )
+            );
+        }
+    );
+}
+
+
+function createRecentWorkoutCard(
+    item
+) {
+    const row =
+        document.createElement(
+            "article"
+        );
+
+    row.className =
+        "recent-workout";
+
+    const header =
+        document.createElement(
+            "div"
+        );
+
+    header.className =
+        "recent-workout-header";
+
+    const titleBlock =
+        document.createElement(
+            "div"
+        );
+
+    const dateElement =
+        document.createElement(
+            "p"
+        );
+
+    dateElement.className =
+        "recent-workout-date";
+
+    dateElement.textContent =
+        formatRecentWorkoutDate(
+            item.date
+        );
+
+    const title =
+        document.createElement(
+            "h3"
+        );
+
+    title.className =
+        "recent-workout-title";
+
+    title.textContent =
+        item.planned_workout?.title
+        || formatWorkoutType(
+            item.workout_type
+        );
+
+    titleBlock.appendChild(
+        dateElement
+    );
+
+    titleBlock.appendChild(
+        title
+    );
+
+    const status =
+        document.createElement(
+            "span"
+        );
+
+    const reviewStatus =
+        item.review?.status
+        || "insufficient_evidence";
+
+    status.className =
+        `execution-badge ${reviewStatus}`;
+
+    status.textContent =
+        formatExecutionStatus(
+            reviewStatus
+        );
+
+    header.appendChild(
+        titleBlock
+    );
+
+    header.appendChild(
+        status
+    );
+
+    const details =
+        document.createElement(
+            "div"
+        );
+
+    details.className =
+        "recent-workout-details";
+
+    const executedType =
+        createRecentWorkoutDetail(
+            "Executed",
+            formatWorkoutType(
+                item.workout_type
+            )
+        );
+
+    details.appendChild(
+        executedType
+    );
+
+    if (
+        item.distance_km != null
+    ) {
+        details.appendChild(
+            createRecentWorkoutDetail(
+                "Distance",
+                `${formatNumber(
+                    item.distance_km
+                )} km`
+            )
+        );
+    }
+
+    if (
+        item.duration_min != null
+    ) {
+        details.appendChild(
+            createRecentWorkoutDetail(
+                "Duration",
+                `${formatNumber(
+                    item.duration_min
+                )} min`
+            )
+        );
+    }
+
+    const planSummary =
+        buildRecentPlanSummary(
+            item
+        );
+
+    if (planSummary) {
+        details.appendChild(
+            createRecentWorkoutDetail(
+                "Plan",
+                planSummary
+            )
+        );
+    }
+
+    row.appendChild(
+        header
+    );
+
+    row.appendChild(
+        details
+    );
+
+    return row;
+}
+
+
+function createRecentWorkoutDetail(
+    label,
+    value
+) {
+    const element =
+        document.createElement(
+            "div"
+        );
+
+    element.className =
+        "recent-workout-detail";
+
+    const labelElement =
+        document.createElement(
+            "span"
+        );
+
+    labelElement.textContent =
+        label;
+
+    const valueElement =
+        document.createElement(
+            "strong"
+        );
+
+    valueElement.textContent =
+        value;
+
+    element.appendChild(
+        labelElement
+    );
+
+    element.appendChild(
+        valueElement
+    );
+
+    return element;
+}
+
+
+function buildRecentPlanSummary(
+    item
+) {
+    if (!item.planned_workout) {
+        return "No matched plan";
+    }
+
+    const parts = [];
+
+    if (
+        item.review?.planned_distance_km
+        != null
+    ) {
+        parts.push(
+            `${formatNumber(
+                item.review
+                    .planned_distance_km
+            )} km`
+        );
+    }
+
+    if (
+        item.review?.planned_duration_min
+        != null
+    ) {
+        parts.push(
+            `${formatNumber(
+                item.review
+                    .planned_duration_min
+            )} min`
+        );
+    }
+
+    return parts.join(" · ");
+}
+
+
+function formatRecentWorkoutDate(
+    value
+) {
+    if (!value) {
+        return "Unknown date";
+    }
+
+    const date =
+        new Date(
+            `${value}T12:00:00`
+        );
+
+    return new Intl.DateTimeFormat(
+        "en-GB",
+        {
+            weekday: "short",
+            day: "numeric",
+            month: "short",
+        }
+    ).format(date);
+}
+
+
+function formatExecutionStatus(
+    value
+) {
+    const labels = {
+        on_target:
+            "On target",
+
+        too_easy:
+            "Easier than planned",
+
+        too_hard:
+            "Harder than planned",
+
+        insufficient_evidence:
+            "Not enough evidence",
+    };
+
+    return (
+        labels[value]
+        || formatLabel(
+            value
+        )
+    );
+}
+
+
+function formatNumber(
+    value
+) {
+    if (
+        value == null
+        || Number.isNaN(
+            Number(value)
+        )
+    ) {
+        return "—";
+    }
+
+    const number =
+        Number(value);
+
+    return Number.isInteger(number)
+        ? String(number)
+        : number.toFixed(1);
 }
 
 

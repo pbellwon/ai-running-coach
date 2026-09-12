@@ -79,6 +79,9 @@ from app.services.workout_feedback_service import (
 from app.services.athlete_memory_service import (
     AthleteMemoryService,
 )
+from app.services.recent_execution_review_service import (
+    RecentExecutionReviewService,
+)
 
 
 class HistoricalLapPayload(BaseModel):
@@ -1517,6 +1520,29 @@ def deactivate_athlete_memory(
         )
 
     return asdict(result)
+
+
+@app.get("/workouts/recent-reviews")
+def recent_workout_reviews(
+    target_date: str | None = None,
+    limit: int = 3,
+):
+    try:
+        result = RecentExecutionReviewService().build(
+            target_date=target_date,
+            limit=limit,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    return {
+        "count": len(result),
+        "items": result,
+    }
 
 
 @app.get("/today")
