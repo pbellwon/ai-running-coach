@@ -67,6 +67,12 @@ from app.services.today_recommendation_service import (
 from app.services.pacemind_today_service import (
     PaceMindTodayService,
 )
+from app.services.today_explanation_service import (
+    TodayExplanationService,
+)
+from app.services.ai_today_explanation_service import (
+    AITodayExplanationService,
+)
 from app.services.sync_state_service import (
     SyncStateService,
 )
@@ -1561,3 +1567,65 @@ def today(
 
     return asdict(result)
 
+@app.get("/explain/today")
+def explain_today(
+    target_date: str | None = None,
+):
+    resolved_date = (
+        target_date
+        or date.today().isoformat()
+    )
+
+    try:
+        explanation = (
+            TodayExplanationService()
+            .build(
+                target_date=resolved_date
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    return asdict(
+        explanation
+    )
+
+@app.get("/explain/today/ai")
+def explain_today_ai(
+    target_date: str | None = None,
+):
+    resolved_date = (
+        target_date
+        or date.today().isoformat()
+    )
+
+    try:
+        explanation = (
+            AITodayExplanationService()
+            .build(
+                target_date=resolved_date
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "AI explanation is currently unavailable."
+            ),
+        ) from exc
+
+    return {
+        "target_date": resolved_date,
+        "explanation": explanation,
+    }
