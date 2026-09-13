@@ -593,3 +593,167 @@ h3 {
         font-size: 34px;
     }
 }
+.workout-feedback {
+    margin-top: 16px;
+    padding-top: 16px;
+
+    border-top: 1px solid #262d37;
+}
+
+.workout-feedback-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.workout-feedback-label {
+    margin: 0 0 3px;
+
+    font-size: 10px;
+    font-weight: 800;
+
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+
+    color: #818b99;
+}
+
+.workout-feedback-hint {
+    margin: 0;
+
+    font-size: 12px;
+    color: #697586;
+}
+
+.workout-feedback-save-state {
+    min-height: 18px;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    color: #86efac;
+}
+
+.workout-feedback-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(
+            2,
+            minmax(0, 1fr)
+        );
+
+    gap: 10px;
+}
+
+.workout-feedback-field {
+    display: flex;
+    flex-direction: column;
+
+    gap: 6px;
+}
+
+.workout-feedback-field > span {
+    font-size: 11px;
+    color: #8993a2;
+}
+
+.workout-feedback-field select,
+.workout-feedback-field textarea {
+    width: 100%;
+
+    border: 1px solid #303845;
+    border-radius: 12px;
+
+    background: #11151a;
+    color: #e5e7eb;
+
+    padding: 10px 11px;
+
+    outline: none;
+
+    transition:
+        border-color 0.2s ease,
+        background 0.2s ease;
+}
+
+.workout-feedback-field select {
+    min-height: 40px;
+}
+
+.workout-feedback-field textarea {
+    resize: vertical;
+    min-height: 68px;
+
+    line-height: 1.4;
+}
+
+.workout-feedback-field select:focus,
+.workout-feedback-field textarea:focus {
+    border-color: #526070;
+    background: #151a20;
+}
+
+.workout-feedback-comment-field {
+    margin-top: 10px;
+}
+
+.workout-feedback-actions {
+    display: flex;
+    justify-content: flex-end;
+
+    margin-top: 10px;
+}
+
+.workout-feedback-save-button {
+    border: 1px solid #3a4655;
+    border-radius: 999px;
+
+    background: #20262e;
+    color: #e5e7eb;
+
+    padding: 8px 13px;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition:
+        background 0.2s ease,
+        border-color 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.workout-feedback-save-button:hover {
+    background: #29313b;
+    border-color: #536173;
+}
+
+.workout-feedback-save-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+@media (max-width: 520px) {
+    .workout-feedback-grid {
+        grid-template-columns:
+            1fr;
+    }
+
+    .workout-feedback-header {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .workout-feedback-actions {
+        justify-content: stretch;
+    }
+
+    .workout-feedback-save-button {
+        width: 100%;
+    }
+}

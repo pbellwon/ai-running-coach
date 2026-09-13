@@ -1113,7 +1113,353 @@ function createRecentWorkoutCard(
         details
     );
 
+    const feedbackSection =
+        createWorkoutFeedbackSection(
+            item.session_id
+        );
+
+    row.appendChild(
+        feedbackSection
+    );
+
+    loadWorkoutFeedback(
+        item.session_id,
+        feedbackSection
+    );
+
     return row;
+}
+
+
+function createWorkoutFeedbackSection(
+    sessionId
+) {
+    const section =
+        document.createElement(
+            "section"
+        );
+
+    section.className =
+        "workout-feedback";
+
+    section.dataset.sessionId =
+        sessionId;
+
+    section.innerHTML = `
+        <div class="workout-feedback-header">
+            <div>
+                <p class="workout-feedback-label">
+                    YOUR FEEDBACK
+                </p>
+                <p class="workout-feedback-hint">
+                    RPE, how it felt, and an optional note.
+                </p>
+            </div>
+
+            <span
+                class="workout-feedback-save-state"
+                aria-live="polite"
+            ></span>
+        </div>
+
+        <div class="workout-feedback-grid">
+            <label class="workout-feedback-field">
+                <span>RPE</span>
+                <select
+                    class="workout-feedback-rpe"
+                    aria-label="RPE"
+                >
+                    <option value="">
+                        —
+                    </option>
+                    <option value="1">1 — Very easy</option>
+                    <option value="2">2</option>
+                    <option value="3">3 — Easy</option>
+                    <option value="4">4</option>
+                    <option value="5">5 — Moderate</option>
+                    <option value="6">6</option>
+                    <option value="7">7 — Hard</option>
+                    <option value="8">8 — Very hard</option>
+                    <option value="9">9 — Extremely hard</option>
+                    <option value="10">10 — Maximal</option>
+                </select>
+            </label>
+
+            <label class="workout-feedback-field">
+                <span>Feeling</span>
+                <select
+                    class="workout-feedback-feeling"
+                    aria-label="Execution feeling"
+                >
+                    <option value="">
+                        —
+                    </option>
+                    <option value="too_easy">
+                        Too easy
+                    </option>
+                    <option value="on_target">
+                        On target
+                    </option>
+                    <option value="too_hard">
+                        Too hard
+                    </option>
+                </select>
+            </label>
+        </div>
+
+        <label class="workout-feedback-field workout-feedback-comment-field">
+            <span>Comment</span>
+            <textarea
+                class="workout-feedback-comment"
+                rows="2"
+                maxlength="1000"
+                placeholder="e.g. legs felt heavy in the last reps"
+            ></textarea>
+        </label>
+
+        <div class="workout-feedback-actions">
+            <button
+                class="workout-feedback-save-button"
+                type="button"
+            >
+                Save feedback
+            </button>
+        </div>
+    `;
+
+    const saveButton =
+        section.querySelector(
+            ".workout-feedback-save-button"
+        );
+
+    saveButton.addEventListener(
+        "click",
+        () => {
+            saveWorkoutFeedback(
+                sessionId,
+                section
+            );
+        }
+    );
+
+    return section;
+}
+
+
+async function loadWorkoutFeedback(
+    sessionId,
+    section
+) {
+    const saveState =
+        section.querySelector(
+            ".workout-feedback-save-state"
+        );
+
+    saveState.textContent =
+        "Loading...";
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/feedback/workout/${encodeURIComponent(
+                sessionId
+            )}`
+        );
+
+        if (response.status === 404) {
+            saveState.textContent = "";
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                `Feedback returned ${response.status}`
+            );
+        }
+
+        const feedback =
+            await response.json();
+
+        populateWorkoutFeedback(
+            section,
+            feedback
+        );
+
+        saveState.textContent =
+            "Saved";
+
+    } catch (error) {
+        console.error(
+            "Could not load workout feedback:",
+            error
+        );
+
+        saveState.textContent =
+            "Unavailable";
+    }
+}
+
+
+function populateWorkoutFeedback(
+    section,
+    feedback
+) {
+    const rpe =
+        section.querySelector(
+            ".workout-feedback-rpe"
+        );
+
+    const feeling =
+        section.querySelector(
+            ".workout-feedback-feeling"
+        );
+
+    const comment =
+        section.querySelector(
+            ".workout-feedback-comment"
+        );
+
+    rpe.value =
+        feedback.perceived_effort != null
+            ? String(
+                Math.round(
+                    feedback.perceived_effort
+                )
+            )
+            : "";
+
+    feeling.value =
+        feedback.execution_feeling
+        || "";
+
+    comment.value =
+        feedback.comment
+        || "";
+}
+
+
+async function saveWorkoutFeedback(
+    sessionId,
+    section
+) {
+    const rpe =
+        section.querySelector(
+            ".workout-feedback-rpe"
+        );
+
+    const feeling =
+        section.querySelector(
+            ".workout-feedback-feeling"
+        );
+
+    const comment =
+        section.querySelector(
+            ".workout-feedback-comment"
+        );
+
+    const saveButton =
+        section.querySelector(
+            ".workout-feedback-save-button"
+        );
+
+    const saveState =
+        section.querySelector(
+            ".workout-feedback-save-state"
+        );
+
+    const perceivedEffort =
+        rpe.value
+            ? Number(
+                rpe.value
+            )
+            : null;
+
+    const executionFeeling =
+        feeling.value
+        || null;
+
+    const commentValue =
+        comment.value.trim()
+        || null;
+
+    if (
+        perceivedEffort == null
+        && executionFeeling == null
+        && commentValue == null
+    ) {
+        saveState.textContent =
+            "Add feedback first";
+
+        return;
+    }
+
+    saveButton.disabled = true;
+    saveButton.textContent =
+        "Saving...";
+
+    saveState.textContent = "";
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/feedback/workout`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json",
+                },
+                body: JSON.stringify({
+                    session_id:
+                        sessionId,
+
+                    perceived_effort:
+                        perceivedEffort,
+
+                    execution_feeling:
+                        executionFeeling,
+
+                    comment:
+                        commentValue,
+                }),
+            }
+        );
+
+        if (!response.ok) {
+            const data =
+                await response.json()
+                .catch(
+                    () => null
+                );
+
+            throw new Error(
+                data?.detail
+                || `Feedback save failed: ${response.status}`
+            );
+        }
+
+        saveState.textContent =
+            "Saved";
+
+        await loadRecentWorkouts();
+
+    } catch (error) {
+        console.error(
+            "Could not save workout feedback:",
+            error
+        );
+
+        saveState.textContent =
+            "Save failed";
+
+        alert(
+            error.message
+            || "Could not save workout feedback."
+        );
+
+    } finally {
+        saveButton.disabled = false;
+        saveButton.textContent =
+            "Save feedback";
+    }
 }
 
 
