@@ -148,6 +148,7 @@ def test_does_not_detect_fast_finish_without_substantial_easy_lead_in():
         is False
     )
 
+
 def test_detects_fast_finish_before_short_trailing_partial_lap():
     analyzer = (
         ExecutedWorkoutStructureAnalyzer()
@@ -211,3 +212,202 @@ def test_detects_fast_finish_before_short_trailing_partial_lap():
         ]
         == 0.04
     )
+
+
+def test_detects_three_threshold_blocks_split_by_autolaps():
+    analyzer = (
+        ExecutedWorkoutStructureAnalyzer()
+    )
+
+    laps = [
+        # Warm-up
+        make_lap(
+            lap_number=1,
+            distance_m=1000.5,
+            elapsed_time_sec=325,
+            avg_hr=116,
+        ),
+        make_lap(
+            lap_number=2,
+            distance_m=3.4,
+            elapsed_time_sec=1,
+            avg_hr=126,
+        ),
+        make_lap(
+            lap_number=3,
+            distance_m=1001.3,
+            elapsed_time_sec=301,
+            avg_hr=125,
+        ),
+        make_lap(
+            lap_number=4,
+            distance_m=995.9,
+            elapsed_time_sec=759,
+            avg_hr=121,
+        ),
+        make_lap(
+            lap_number=5,
+            distance_m=326.2,
+            elapsed_time_sec=141,
+            avg_hr=136,
+        ),
+
+        # Threshold block 1
+        make_lap(
+            lap_number=6,
+            distance_m=1000.4,
+            elapsed_time_sec=246,
+            avg_hr=151,
+        ),
+        make_lap(
+            lap_number=7,
+            distance_m=1004.5,
+            elapsed_time_sec=246,
+            avg_hr=161,
+        ),
+        make_lap(
+            lap_number=8,
+            distance_m=433.8,
+            elapsed_time_sec=108,
+            avg_hr=160,
+        ),
+
+        # Recovery 1
+        make_lap(
+            lap_number=9,
+            distance_m=249.7,
+            elapsed_time_sec=91,
+            avg_hr=152,
+        ),
+
+        # Threshold block 2
+        make_lap(
+            lap_number=10,
+            distance_m=990.9,
+            elapsed_time_sec=244,
+            avg_hr=158,
+        ),
+        make_lap(
+            lap_number=11,
+            distance_m=4.9,
+            elapsed_time_sec=1,
+            avg_hr=162,
+        ),
+        make_lap(
+            lap_number=12,
+            distance_m=1000.0,
+            elapsed_time_sec=243,
+            avg_hr=162,
+        ),
+        make_lap(
+            lap_number=13,
+            distance_m=454.8,
+            elapsed_time_sec=111,
+            avg_hr=163,
+        ),
+
+        # Recovery 2
+        make_lap(
+            lap_number=14,
+            distance_m=253.5,
+            elapsed_time_sec=91,
+            avg_hr=155,
+        ),
+
+        # Threshold block 3
+        make_lap(
+            lap_number=15,
+            distance_m=997.3,
+            elapsed_time_sec=243,
+            avg_hr=161,
+        ),
+        make_lap(
+            lap_number=16,
+            distance_m=3.3,
+            elapsed_time_sec=1,
+            avg_hr=166,
+        ),
+        make_lap(
+            lap_number=17,
+            distance_m=1000.2,
+            elapsed_time_sec=244,
+            avg_hr=165,
+        ),
+        make_lap(
+            lap_number=18,
+            distance_m=462.1,
+            elapsed_time_sec=112,
+            avg_hr=163,
+        ),
+
+        # Recovery 3
+        make_lap(
+            lap_number=19,
+            distance_m=260.8,
+            elapsed_time_sec=90,
+            avg_hr=157,
+        ),
+
+        # Cool-down
+        make_lap(
+            lap_number=20,
+            distance_m=999.0,
+            elapsed_time_sec=355,
+            avg_hr=140,
+        ),
+        make_lap(
+            lap_number=21,
+            distance_m=4.1,
+            elapsed_time_sec=1,
+            avg_hr=144,
+        ),
+        make_lap(
+            lap_number=22,
+            distance_m=999.9,
+            elapsed_time_sec=355,
+            avg_hr=143,
+        ),
+        make_lap(
+            lap_number=23,
+            distance_m=512.3,
+            elapsed_time_sec=167,
+            avg_hr=143,
+        ),
+    ]
+
+    blocks = (
+        analyzer._find_threshold_blocks(
+            laps
+        )
+    )
+
+    assert (
+        len(blocks)
+        == 3
+    )
+
+    assert [
+        round(
+            sum(
+                lap.elapsed_time_sec
+                for lap in block
+            )
+        )
+        for block in blocks
+    ] == [
+        600,
+        599,
+        600,
+    ]
+
+    assert [
+        [
+            lap.lap_number
+            for lap in block
+        ]
+        for block in blocks
+    ] == [
+        [6, 7, 8],
+        [10, 11, 12, 13],
+        [15, 16, 17, 18]
+    ]

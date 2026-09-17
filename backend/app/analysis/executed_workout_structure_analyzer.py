@@ -81,11 +81,27 @@ class ExecutedWorkoutStructureAnalyzer:
             )
         )
 
+        threshold_blocks = (
+            self._find_threshold_blocks(
+                laps
+            )
+        )
+
         tempo_block_lap_numbers = {
             lap.lap_number
 
             for block
             in continuous_tempo_blocks
+
+            for lap
+            in block
+        }
+
+        threshold_block_lap_numbers = {
+            lap.lap_number
+
+            for block
+            in threshold_blocks
 
             for lap
             in block
@@ -107,6 +123,12 @@ class ExecutedWorkoutStructureAnalyzer:
         hill_candidate_laps = []
 
         for lap in laps:
+
+            if (
+                lap.lap_number
+                in threshold_block_lap_numbers
+            ):
+                continue
 
             if (
                 lap.lap_number
@@ -266,6 +288,13 @@ class ExecutedWorkoutStructureAnalyzer:
                 )
             )
 
+        if threshold_blocks:
+            segments.append(
+                self._build_threshold_block_segment(
+                    threshold_blocks
+                )
+            )
+
         if threshold_laps:
             segments.append(
                 self._build_rep_segment(
@@ -369,6 +398,9 @@ class ExecutedWorkoutStructureAnalyzer:
                     continuous_tempo_blocks
                 ),
                 tempo_laps=tempo_laps,
+                threshold_blocks=(
+                    threshold_blocks
+                ),
                 threshold_laps=(
                     threshold_laps
                 ),
@@ -655,7 +687,146 @@ class ExecutedWorkoutStructureAnalyzer:
                 2,
             ),
         }
+    def _find_threshold_blocks(
+        self,
+        laps: list[LapDB],
+    ) -> list[list[LapDB]]:
 
+        min_total_sec = 480
+        max_total_sec = 720
+
+        min_work_sec = 60
+        max_work_sec = 360
+
+        max_work_pace_sec_per_km = 270
+
+        max_technical_split_sec = 5
+
+        blocks = []
+        current_block = []
+        work_laps_count = 0
+
+        for lap in laps:
+
+            distance_m = (
+                lap.distance_m
+                or 0
+            )
+
+            duration_sec = (
+                lap.elapsed_time_sec
+                or 0
+            )
+
+            if (
+                distance_m <= 0
+                or duration_sec <= 0
+            ):
+                continue
+
+            pace_sec_per_km = (
+                duration_sec
+                / (
+                    distance_m
+                    / 1000
+                )
+            )
+
+            is_technical_split = (
+                duration_sec
+                <= max_technical_split_sec
+            )
+
+            is_threshold_work_fragment = (
+                min_work_sec
+                <= duration_sec
+                <= max_work_sec
+                and pace_sec_per_km
+                <= max_work_pace_sec_per_km
+            )
+
+            if is_threshold_work_fragment:
+                current_block.append(
+                    lap
+                )
+
+                work_laps_count += 1
+
+                continue
+
+            if (
+                is_technical_split
+                and current_block
+            ):
+                current_block.append(
+                    lap
+                )
+
+                continue
+
+            if current_block:
+                self._append_threshold_block_if_valid(
+                    blocks=blocks,
+                    block=current_block,
+                    work_laps_count=(
+                        work_laps_count
+                    ),
+                    min_total_sec=(
+                        min_total_sec
+                    ),
+                    max_total_sec=(
+                        max_total_sec
+                    ),
+                )
+
+            current_block = []
+            work_laps_count = 0
+
+        if current_block:
+            self._append_threshold_block_if_valid(
+                blocks=blocks,
+                block=current_block,
+                work_laps_count=(
+                    work_laps_count
+                ),
+                min_total_sec=(
+                    min_total_sec
+                ),
+                max_total_sec=(
+                    max_total_sec
+                ),
+            )
+
+        return blocks
+
+
+    def _append_threshold_block_if_valid(
+        self,
+        blocks: list[list[LapDB]],
+        block: list[LapDB],
+        work_laps_count: int,
+        min_total_sec: int,
+        max_total_sec: int,
+    ) -> None:
+
+        if work_laps_count < 2:
+            return
+
+        total_duration_sec = sum(
+            lap.elapsed_time_sec
+            or 0
+            for lap in block
+        )
+
+        if (
+            min_total_sec
+            <= total_duration_sec
+            <= max_total_sec
+        ):
+            blocks.append(
+                list(block)
+            )
+            
     def _find_continuous_tempo_blocks(
         self,
         laps: list[LapDB],
@@ -794,6 +965,113 @@ class ExecutedWorkoutStructureAnalyzer:
             ] = intensity
 
         return result
+
+    def _build_threshold_block_segment(
+        self,
+        blocks: list[list[LapDB]],
+    ) -> dict:
+
+        block_durations = []
+        block_distances = []
+        block_paces = []
+        block_hrs = []
+
+        for block in blocks:
+
+            total_duration_sec = sum(
+                lap.elapsed_time_sec
+                or 0
+                for lap in block
+            )
+
+            total_distance_m = sum(
+                lap.distance_m
+                or 0
+                for lap in block
+            )
+
+            block_durations.append(
+                total_duration_sec
+            )
+
+            block_distances.append(
+                total_distance_m
+            )
+
+            if total_distance_m > 0:
+                block_paces.append(
+                    total_duration_sec
+                    / (
+                        total_distance_m
+                        / 1000
+                    )
+                )
+
+            hr_values = [
+                lap.avg_hr
+                for lap in block
+                if lap.avg_hr
+            ]
+
+            if hr_values:
+                block_hrs.append(
+                    mean(
+                        hr_values
+                    )
+                )
+
+        return {
+            "segment":
+                "threshold_blocks",
+
+            "repetitions":
+                len(blocks),
+
+            "avg_duration_sec":
+                round(
+                    mean(
+                        block_durations
+                    ),
+                    1,
+                ),
+
+            "avg_distance_km":
+                round(
+                    mean(
+                        block_distances
+                    )
+                    / 1000,
+                    2,
+                ),
+
+            "avg_pace_sec_per_km":
+                (
+                    round(
+                        mean(
+                            block_paces
+                        ),
+                        1,
+                    )
+                    if block_paces
+                    else None
+                ),
+
+            "avg_hr":
+                (
+                    round(
+                        mean(
+                            block_hrs
+                        ),
+                        1,
+                    )
+                    if block_hrs
+                    else None
+                ),
+
+            "intensity":
+                "threshold",
+        }
+
 
     def _build_rep_segment(
         self,
@@ -1106,6 +1384,7 @@ class ExecutedWorkoutStructureAnalyzer:
         easy_laps: list[LapDB],
         tempo_blocks: list[list[LapDB]],
         tempo_laps: list[LapDB],
+        threshold_blocks: list[list[LapDB]],
         threshold_laps: list[LapDB],
         vo2max_laps: list[LapDB],
         hill_candidate_laps: list[LapDB],
@@ -1127,6 +1406,14 @@ class ExecutedWorkoutStructureAnalyzer:
             return "easy_run"
 
         if (
+            threshold_blocks
+            and vo2max_laps
+        ):
+            return (
+                "threshold+vo2max"
+            )
+
+        if (
             threshold_laps
             and vo2max_laps
         ):
@@ -1139,6 +1426,9 @@ class ExecutedWorkoutStructureAnalyzer:
             or tempo_laps
         ):
             return "tempo_run"
+
+        if threshold_blocks:
+            return "threshold"
 
         if threshold_laps:
             return "threshold"
