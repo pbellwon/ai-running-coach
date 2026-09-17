@@ -621,6 +621,9 @@ class RecentExecutionReviewService:
             "title": (
                 planned_workout.title
             ),
+            "description": (
+                planned_workout.description
+            ),
             "workout_type": (
                 planned_workout.workout_type
             ),
