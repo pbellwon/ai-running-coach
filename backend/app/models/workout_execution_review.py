@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -19,7 +20,7 @@ class WorkoutExecutionReview:
     planned_duration_min: float | None
     executed_duration_min: float | None
 
-    athlete_feedback: str | None
+    athlete_feedback: dict[str, Any] | None
 
     evidence: list[str] = field(
         default_factory=list

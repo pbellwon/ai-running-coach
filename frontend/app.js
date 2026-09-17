@@ -29,8 +29,11 @@ document.addEventListener(
 
 
 async function loadDashboard() {
+    ensureAICoachCard();
+
     await Promise.all([
         loadToday(),
+        loadAIExplanation(),
         loadTrainingOverview(),
         loadRecentWorkouts(),
     ]);
@@ -114,6 +117,222 @@ async function loadToday() {
             "hidden"
         );
     }
+}
+
+function ensureAICoachCard() {
+    const dashboard =
+        document.getElementById(
+            "dashboard"
+        );
+
+    if (!dashboard) {
+        return;
+    }
+
+    if (
+        document.getElementById(
+            "ai-coach-card"
+        )
+    ) {
+        return;
+    }
+
+    const card =
+        document.createElement(
+            "section"
+        );
+
+    card.id =
+        "ai-coach-card";
+
+    card.style.marginBottom =
+        "24px";
+
+    card.style.padding =
+        "24px";
+
+    card.style.border =
+        "1px solid rgba(255, 255, 255, 0.08)";
+
+    card.style.borderRadius =
+        "16px";
+
+    card.style.background =
+        "#14171c";
+
+    card.innerHTML = `
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                margin-bottom: 14px;
+            "
+        >
+            <div>
+                <p
+                    style="
+                        margin: 0 0 6px 0;
+                        font-size: 12px;
+                        font-weight: 700;
+                        letter-spacing: 0.12em;
+                        color: #9ca3af;
+                    "
+                >
+                    PACE MIND COACH
+                </p>
+
+                <h2
+                    style="
+                        margin: 0;
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: #e5e7eb;
+                    "
+                >
+                    Coach explanation
+                </h2>
+            </div>
+
+            <span
+                style="
+                    padding: 5px 9px;
+                    border-radius: 999px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 0.06em;
+                    background: rgba(255, 255, 255, 0.06);
+                    color: #9ca3af;
+                "
+            >
+                AI
+            </span>
+        </div>
+
+        <p
+            id="ai-coach-state"
+            style="
+                margin: 0;
+                font-size: 14px;
+                line-height: 1.6;
+                color: #9ca3af;
+            "
+        >
+            Loading coach explanation...
+        </p>
+
+        <div
+            id="ai-coach-explanation"
+            style="
+                margin-top: 0;
+                white-space: pre-line;
+                font-size: 15px;
+                line-height: 1.7;
+                color: #e5e7eb;
+            "
+        ></div>
+    `;
+
+    dashboard.insertBefore(
+        card,
+        dashboard.firstChild
+    );
+}
+
+
+async function loadAIExplanation() {
+    const content =
+        document.getElementById(
+            "ai-coach-explanation"
+        );
+
+    const state =
+        document.getElementById(
+            "ai-coach-state"
+        );
+
+    if (
+        !content
+        || !state
+    ) {
+        return;
+    }
+
+    state.textContent =
+        "Loading coach explanation...";
+
+    content.textContent = "";
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/explain/today/ai`
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `AI explanation returned ${response.status}`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        renderAIExplanation(
+            data.explanation
+        );
+
+    } catch (error) {
+        console.error(
+            "Could not load AI explanation:",
+            error
+        );
+
+        state.textContent =
+            "Coach explanation is currently unavailable.";
+
+        content.textContent = "";
+    }
+}
+
+
+function renderAIExplanation(
+    explanation
+) {
+    const content =
+        document.getElementById(
+            "ai-coach-explanation"
+        );
+
+    const state =
+        document.getElementById(
+            "ai-coach-state"
+        );
+
+    if (
+        !content
+        || !state
+    ) {
+        return;
+    }
+
+    const normalized =
+        String(
+            explanation || ""
+        ).trim();
+
+    if (!normalized) {
+        state.textContent =
+            "No coach explanation available.";
+
+        content.textContent = "";
+
+        return;
+    }
+
+    state.textContent = "";
+    content.textContent =
+        normalized;
 }
 
 
@@ -1113,6 +1332,19 @@ function createRecentWorkoutCard(
         details
     );
 
+    const aiReviewSection =
+        createAIWorkoutReviewSection();
+
+    row.appendChild(
+        aiReviewSection
+    );
+
+    loadAIWorkoutExplanation(
+        item.session_id,
+        item.date,
+        aiReviewSection
+    );
+
     const feedbackSection =
         createWorkoutFeedbackSection(
             item.session_id
@@ -1128,6 +1360,312 @@ function createRecentWorkoutCard(
     );
 
     return row;
+}
+
+function createAIWorkoutReviewSection() {
+    const section =
+        document.createElement(
+            "section"
+        );
+
+    section.className =
+        "workout-ai-review";
+
+    section.style.marginTop =
+        "18px";
+
+    section.style.padding =
+        "16px";
+
+    section.style.borderRadius =
+        "12px";
+
+    section.style.background =
+        "rgba(255, 255, 255, 0.04)";
+
+    section.style.border =
+        "1px solid rgba(255, 255, 255, 0.08)";
+
+    const header =
+        document.createElement(
+            "div"
+        );
+
+    header.style.display =
+        "flex";
+
+    header.style.alignItems =
+        "center";
+
+    header.style.justifyContent =
+        "space-between";
+
+    header.style.gap =
+        "12px";
+
+    const label =
+        document.createElement(
+            "div"
+        );
+
+    const eyebrow =
+        document.createElement(
+            "p"
+        );
+
+    eyebrow.textContent =
+        "PACE MIND COACH";
+
+    eyebrow.style.margin =
+        "0 0 4px 0";
+
+    eyebrow.style.fontSize =
+        "11px";
+
+    eyebrow.style.letterSpacing =
+        "0.12em";
+
+    eyebrow.style.opacity =
+        "0.6";
+
+    const title =
+        document.createElement(
+            "h4"
+        );
+
+    title.textContent =
+        "Post-workout review";
+
+    title.style.margin =
+        "0";
+
+    label.appendChild(
+        eyebrow
+    );
+
+    label.appendChild(
+        title
+    );
+
+    const badge =
+        document.createElement(
+            "span"
+        );
+
+    badge.textContent =
+        "AI";
+
+    badge.style.fontSize =
+        "11px";
+
+    badge.style.padding =
+        "4px 8px";
+
+    badge.style.borderRadius =
+        "999px";
+
+    badge.style.border =
+        "1px solid rgba(255, 255, 255, 0.15)";
+
+    badge.style.opacity =
+        "0.75";
+
+    header.appendChild(
+        label
+    );
+
+    header.appendChild(
+        badge
+    );
+
+    const state =
+        document.createElement(
+            "p"
+        );
+
+    state.className =
+        "workout-ai-review-state";
+
+    state.textContent =
+        "Preparing review…";
+
+    state.style.margin =
+        "12px 0 0 0";
+
+    state.style.opacity =
+        "0.6";
+
+    const content =
+        document.createElement(
+            "div"
+        );
+
+    content.className =
+        "workout-ai-review-content";
+
+    content.style.display =
+        "none";
+
+    content.style.marginTop =
+        "12px";
+
+    content.style.whiteSpace =
+        "pre-line";
+
+    content.style.lineHeight =
+        "1.55";
+
+    section.appendChild(
+        header
+    );
+
+    section.appendChild(
+        state
+    );
+
+    section.appendChild(
+        content
+    );
+
+    return section;
+}
+
+
+async function loadAIWorkoutExplanation(
+    sessionId,
+    targetDate,
+    section
+) {
+    const state =
+        section.querySelector(
+            ".workout-ai-review-state"
+        );
+
+    const content =
+        section.querySelector(
+            ".workout-ai-review-content"
+        );
+
+    if (
+        !state
+        || !content
+    ) {
+        return;
+    }
+
+    state.textContent =
+        "Preparing review…";
+
+    state.style.display =
+        "block";
+
+    content.style.display =
+        "none";
+
+    try {
+        const encodedSessionId =
+            encodeURIComponent(
+                sessionId
+            );
+
+        const query =
+            targetDate
+                ? (
+                    `?target_date=${
+                        encodeURIComponent(
+                            targetDate
+                        )
+                    }`
+                )
+                : "";
+
+        const response =
+            await fetch(
+                `${API_BASE_URL}/explain/workout/${encodedSessionId}/ai${query}`
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                `Workout explanation failed: ${
+                    response.status
+                }`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        renderAIWorkoutExplanation(
+            data.explanation,
+            section
+        );
+
+    } catch (error) {
+        console.error(
+            "Failed to load AI workout review:",
+            error
+        );
+
+        state.textContent =
+            "Coach review is currently unavailable.";
+
+        state.style.display =
+            "block";
+
+        content.style.display =
+            "none";
+    }
+}
+
+
+function renderAIWorkoutExplanation(
+    explanation,
+    section
+) {
+    const state =
+        section.querySelector(
+            ".workout-ai-review-state"
+        );
+
+    const content =
+        section.querySelector(
+            ".workout-ai-review-content"
+        );
+
+    if (
+        !state
+        || !content
+    ) {
+        return;
+    }
+
+    const text =
+        (
+            explanation
+            || ""
+        ).trim();
+
+    if (!text) {
+        state.textContent =
+            "No coach review is available.";
+
+        state.style.display =
+            "block";
+
+        content.style.display =
+            "none";
+
+        return;
+    }
+
+    content.textContent =
+        text;
+
+    content.style.display =
+        "block";
+
+    state.style.display =
+        "none";
 }
 
 

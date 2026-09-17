@@ -88,6 +88,12 @@ from app.services.athlete_memory_service import (
 from app.services.recent_execution_review_service import (
     RecentExecutionReviewService,
 )
+from app.services.workout_explanation_service import (
+    WorkoutExplanationService,
+)
+from app.services.ai_workout_explanation_service import (
+    AIWorkoutExplanationService,
+)
 
 
 class HistoricalLapPayload(BaseModel):
@@ -1627,5 +1633,74 @@ def explain_today_ai(
 
     return {
         "target_date": resolved_date,
+        "explanation": explanation,
+    }
+
+@app.get("/explain/workout/{session_id}")
+def explain_workout(
+    session_id: str,
+    target_date: str | None = None,
+):
+    try:
+        explanation = (
+            WorkoutExplanationService()
+            .build(
+                session_id=session_id,
+                target_date=target_date,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    return asdict(
+        explanation
+    )
+
+@app.get("/explain/workout/{session_id}/ai")
+def explain_workout_ai(
+    session_id: str,
+    target_date: str | None = None,
+):
+    try:
+        explanation = (
+            AIWorkoutExplanationService()
+            .build(
+                session_id=session_id,
+                target_date=target_date,
+            )
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "AI workout explanation is currently unavailable."
+            ),
+        ) from exc
+
+    return {
+        "session_id": session_id,
         "explanation": explanation,
     }

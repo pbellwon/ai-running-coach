@@ -16,6 +16,10 @@ from app.models.workout_execution_review import (
 from app.services.recent_execution_review_service import (
     RecentExecutionReviewService,
 )
+from app.models.executed_session import (
+    ExecutedSession,
+    ExecutedSessionComponent,
+)
 
 
 def build_session_factory():
@@ -109,6 +113,37 @@ class FakeSessionBuilder:
         self,
         workout,
     ):
+        component = (
+            ExecutedSessionComponent(
+                workout=workout,
+                workout_file=(
+                    workout.source_file
+                ),
+                start_time=(
+                    workout.start_time
+                ),
+                end_time=(
+                    workout.start_time
+                ),
+                sport="running",
+                distance_km=(
+                    workout.distance_km
+                ),
+                duration_min=(
+                    workout.duration_sec
+                    / 60
+                ),
+                workout_type=(
+                    workout.declared_workout_type
+                    or "easy_run"
+                ),
+                confidence=0.8,
+                classification_method="test",
+                warnings=[],
+                role="main",
+            )
+        )
+
         return ExecutedSession(
             session_id=(
                 f"session:"
@@ -127,24 +162,35 @@ class FakeSessionBuilder:
             ),
             confidence=0.8,
             classification_method="test",
-            components=[],
+            components=[
+                component
+            ],
             total_distance_km=(
                 workout.distance_km
             ),
             total_duration_min=(
-                workout.duration_sec / 60
+                workout.duration_sec
+                / 60
             ),
             warnings=[],
         )
 
 
 class FakeReviewEngine:
+    def __init__(self):
+        self.execution_structures = []
+
     def review(
         self,
         session,
         planned_workout,
         feedback,
+        execution_structure=None,
     ):
+        self.execution_structures.append(
+            execution_structure
+        )
+
         status = (
             "on_target"
             if planned_workout is not None
@@ -189,6 +235,50 @@ class FakeReviewEngine:
             warnings=[],
         )
 
+class FakeStructureAnalyzer:
+    def __init__(self):
+        self.workout_files = []
+
+    def analyze(
+        self,
+        workout_file,
+    ):
+        self.workout_files.append(
+            workout_file
+        )
+
+        return {
+            "workout_file": (
+                workout_file
+            ),
+            "segments": [
+                {
+                    "segment": (
+                        "fast_finish"
+                    ),
+                    "distance_km": 1.0,
+                }
+            ],
+            "summary": {
+                "laps_count": 17,
+                "detected_type": (
+                    "easy_run"
+                ),
+                "confidence": 0.8,
+                "classification_method": (
+                    "lap_pattern"
+                ),
+                "fast_finish": {
+                    "detected": True,
+                    "distance_km": 1.0,
+                    "pace_improvement_percent": (
+                        28.8
+                    ),
+                },
+                "warnings": [],
+            },
+        }
+
 
 def add_workout(
     session_factory,
@@ -224,6 +314,8 @@ def add_workout(
 
 def build_service(
     session_factory,
+    structure_analyzer=None,
+    review_engine=None,
 ):
     return RecentExecutionReviewService(
         session_factory=session_factory,
@@ -231,7 +323,16 @@ def build_service(
         plan_importer=FakePlanImporter(),
         session_builder=FakeSessionBuilder(),
         feedback_service=FakeFeedbackService(),
-        review_engine=FakeReviewEngine(),
+        review_engine=(
+            review_engine
+            if review_engine is not None
+            else FakeReviewEngine()
+        ),
+        structure_analyzer=(
+            structure_analyzer
+            if structure_analyzer is not None
+            else FakeStructureAnalyzer()
+        ),
     )
 
 
@@ -425,3 +526,69 @@ def test_returns_empty_list_when_no_sessions_exist():
     )
 
     assert result == []
+
+def test_passes_running_structure_to_review_engine():
+    session_factory = (
+        build_session_factory()
+    )
+
+    add_workout(
+        session_factory=session_factory,
+        source_file="long.fit",
+        start_time=datetime(
+            2026,
+            9,
+            11,
+            9,
+            0,
+        ),
+        distance_km=17.0,
+        duration_min=88.0,
+        workout_type="easy_run",
+    )
+
+    analyzer = (
+        FakeStructureAnalyzer()
+    )
+
+    review_engine = (
+        FakeReviewEngine()
+    )
+
+    service = build_service(
+        session_factory,
+        structure_analyzer=analyzer,
+        review_engine=review_engine,
+    )
+
+    result = service.build(
+        target_date="2026-09-11",
+        limit=1,
+    )
+
+    assert len(result) == 1
+
+    assert (
+        analyzer.workout_files
+        == [
+            "long.fit"
+        ]
+    )
+
+    assert (
+        review_engine
+        .execution_structures[0]
+        ["summary"]
+        ["fast_finish"]
+        ["detected"]
+        is True
+    )
+
+    assert (
+        result[0]
+        ["execution_structure"]
+        ["summary"]
+        ["fast_finish"]
+        ["detected"]
+        is True
+    )

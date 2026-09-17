@@ -16,7 +16,9 @@ class IntervalsIcuClient:
     ):
         self.api_key = (
             api_key
-            or os.getenv("INTERVALS_API_KEY")
+            or os.getenv(
+                "INTERVALS_API_KEY"
+            )
         )
 
         self.athlete_id = (
@@ -32,7 +34,9 @@ class IntervalsIcuClient:
                 "INTERVALS_API_KEY is not configured."
             )
 
-    def get_athlete(self) -> dict:
+    def get_athlete(
+        self,
+    ) -> dict:
         return self._get_json(
             f"/athlete/{self.athlete_id}"
         )
@@ -52,15 +56,63 @@ class IntervalsIcuClient:
         data = self._get_json(
             f"/athlete/{self.athlete_id}/activities",
             params={
-                "oldest": oldest_value.isoformat(),
-                "newest": newest_value.isoformat(),
+                "oldest": (
+                    oldest_value.isoformat()
+                ),
+                "newest": (
+                    newest_value.isoformat()
+                ),
             },
         )
 
-        if not isinstance(data, list):
+        if not isinstance(
+            data,
+            list,
+        ):
             raise RuntimeError(
                 "Intervals.icu activities response "
                 "is not a list."
+            )
+
+        return data
+
+    def get_activity(
+        self,
+        activity_id: str,
+    ) -> dict:
+        data = self._get_json(
+            f"/activity/{activity_id}"
+        )
+
+        if not isinstance(
+            data,
+            dict,
+        ):
+            raise RuntimeError(
+                "Intervals.icu activity response "
+                "is not an object."
+            )
+
+        return data
+
+    def get_activity_with_intervals(
+        self,
+        activity_id: str,
+    ) -> dict:
+        data = self._get_json(
+            f"/activity/{activity_id}",
+            params={
+                "intervals": "true",
+            },
+        )
+
+        if not isinstance(
+            data,
+            dict,
+        ):
+            raise RuntimeError(
+                "Intervals.icu activity response "
+                "is not an object."
             )
 
         return data
@@ -80,12 +132,19 @@ class IntervalsIcuClient:
         data = self._get_json(
             f"/athlete/{self.athlete_id}/wellness",
             params={
-                "oldest": oldest_value.isoformat(),
-                "newest": newest_value.isoformat(),
+                "oldest": (
+                    oldest_value.isoformat()
+                ),
+                "newest": (
+                    newest_value.isoformat()
+                ),
             },
         )
 
-        if not isinstance(data, list):
+        if not isinstance(
+            data,
+            list,
+        ):
             raise RuntimeError(
                 "Intervals.icu wellness response "
                 "is not a list."
@@ -98,7 +157,9 @@ class IntervalsIcuClient:
         path: str,
         params: dict | None = None,
     ):
-        url = f"{self.BASE_URL}{path}"
+        url = (
+            f"{self.BASE_URL}{path}"
+        )
 
         response = requests.get(
             url,
@@ -110,7 +171,9 @@ class IntervalsIcuClient:
             timeout=30,
         )
 
-        self._raise_for_status(response)
+        self._raise_for_status(
+            response
+        )
 
         return response.json()
 
@@ -119,45 +182,72 @@ class IntervalsIcuClient:
         oldest: date | datetime | str,
         newest: date | datetime | str,
     ) -> tuple[date, date]:
-        oldest_value = self._normalize_date(
-            oldest
+        oldest_value = (
+            self._normalize_date(
+                oldest
+            )
         )
 
-        newest_value = self._normalize_date(
-            newest
+        newest_value = (
+            self._normalize_date(
+                newest
+            )
         )
 
-        if oldest_value > newest_value:
+        if (
+            oldest_value
+            > newest_value
+        ):
             raise ValueError(
-                "oldest cannot be later than newest."
+                "oldest cannot be later "
+                "than newest."
             )
 
-        return oldest_value, newest_value
+        return (
+            oldest_value,
+            newest_value,
+        )
 
     def _normalize_date(
         self,
         value: date | datetime | str,
     ) -> date:
-        if isinstance(value, datetime):
+        if isinstance(
+            value,
+            datetime,
+        ):
             return value.date()
 
-        if isinstance(value, date):
+        if isinstance(
+            value,
+            date,
+        ):
             return value
 
-        if isinstance(value, str):
-            normalized = value.strip()
+        if isinstance(
+            value,
+            str,
+        ):
+            normalized = (
+                value.strip()
+            )
 
             try:
-                return date.fromisoformat(
-                    normalized
+                return (
+                    date.fromisoformat(
+                        normalized
+                    )
                 )
+
             except ValueError as exc:
                 raise ValueError(
-                    "Date must use YYYY-MM-DD format."
+                    "Date must use "
+                    "YYYY-MM-DD format."
                 ) from exc
 
         raise TypeError(
-            "Date must be date, datetime or ISO string."
+            "Date must be date, datetime "
+            "or ISO string."
         )
 
     def _raise_for_status(
@@ -167,26 +257,40 @@ class IntervalsIcuClient:
         if response.ok:
             return
 
-        if response.status_code == 401:
+        if (
+            response.status_code
+            == 401
+        ):
             raise RuntimeError(
-                "Intervals.icu authentication failed "
-                "(401 Unauthorized). Check API key."
+                "Intervals.icu authentication "
+                "failed (401 Unauthorized). "
+                "Check API key."
             )
 
-        if response.status_code == 403:
+        if (
+            response.status_code
+            == 403
+        ):
             raise RuntimeError(
                 "Intervals.icu access denied "
                 "(403 Forbidden)."
             )
 
-        if response.status_code == 429:
-            retry_after = response.headers.get(
-                "Retry-After"
+        if (
+            response.status_code
+            == 429
+        ):
+            retry_after = (
+                response.headers.get(
+                    "Retry-After"
+                )
             )
 
             raise RuntimeError(
-                "Intervals.icu rate limit exceeded. "
-                f"Retry-After: {retry_after}"
+                "Intervals.icu rate limit "
+                "exceeded. "
+                f"Retry-After: "
+                f"{retry_after}"
             )
 
         raise RuntimeError(

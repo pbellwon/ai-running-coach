@@ -20,6 +20,9 @@ class WorkoutExecutionReviewEngine:
     Rules for composite strength + cross-training plans:
     - planned_duration_min belongs to the cross-training component;
     - strength duration is not evaluated against planned_duration_min.
+
+    Execution structure may add evidence and warnings without
+    automatically changing the overall execution status.
     """
 
     TOO_LOW_RATIO = 0.85
@@ -48,6 +51,7 @@ class WorkoutExecutionReviewEngine:
         session: ExecutedSession,
         planned_workout: Any | None,
         feedback: WorkoutFeedback | None = None,
+        execution_structure: dict | None = None,
     ) -> WorkoutExecutionReview:
         evidence: list[str] = []
         warnings: list[str] = list(
@@ -67,12 +71,41 @@ class WorkoutExecutionReviewEngine:
         )
 
         athlete_feedback = (
+            self._serialize_feedback(
+                feedback
+            )
+        )
+
+        execution_feeling = (
             feedback.execution_feeling
             if feedback is not None
             else None
         )
 
         if planned_workout is None:
+            self._apply_execution_structure(
+                execution_structure=execution_structure,
+                planned_workout=None,
+                evidence=evidence,
+                warnings=warnings,
+            )
+
+            if execution_feeling is not None:
+                evidence.append(
+                    f"Athlete feedback: "
+                    f"{execution_feeling}."
+                )
+
+            if (
+                feedback is not None
+                and feedback.perceived_effort
+                is not None
+            ):
+                evidence.append(
+                    f"Athlete RPE: "
+                    f"{feedback.perceived_effort:.1f}/10."
+                )
+
             return WorkoutExecutionReview(
                 session_id=session.session_id,
                 planned_workout_type=None,
@@ -80,12 +113,22 @@ class WorkoutExecutionReviewEngine:
                 status="insufficient_evidence",
                 confidence=0.35,
                 planned_distance_km=None,
-                executed_distance_km=session.total_distance_km,
+                executed_distance_km=(
+                    session.total_distance_km
+                ),
                 planned_duration_min=None,
-                executed_duration_min=session.total_duration_min,
-                athlete_feedback=athlete_feedback,
+                executed_duration_min=(
+                    session.total_duration_min
+                ),
+                athlete_feedback=(
+                    athlete_feedback
+                ),
                 evidence=[
-                    "No planned workout matched this session."
+                    (
+                        "No planned workout matched "
+                        "this session."
+                    ),
+                    *evidence,
                 ],
                 warnings=warnings,
             )
@@ -155,19 +198,37 @@ class WorkoutExecutionReviewEngine:
             planned_duration_min=planned_duration_min,
         )
 
-        if athlete_feedback is not None:
+        self._apply_execution_structure(
+            execution_structure=execution_structure,
+            planned_workout=planned_workout,
+            evidence=evidence,
+            warnings=warnings,
+        )
+
+        if execution_feeling is not None:
             evidence.append(
-                f"Athlete feedback: {athlete_feedback}."
+                f"Athlete feedback: "
+                f"{execution_feeling}."
             )
 
             status = self._combine_with_feedback(
                 objective_status=objective_status,
-                athlete_feedback=athlete_feedback,
+                athlete_feedback=execution_feeling,
             )
 
             confidence = min(
                 1.0,
                 confidence + 0.1,
+            )
+
+        if (
+            feedback is not None
+            and feedback.perceived_effort
+            is not None
+        ):
+            evidence.append(
+                f"Athlete RPE: "
+                f"{feedback.perceived_effort:.1f}/10."
             )
 
         return WorkoutExecutionReview(
@@ -180,12 +241,159 @@ class WorkoutExecutionReviewEngine:
                 2,
             ),
             planned_distance_km=planned_distance_km,
-            executed_distance_km=session.total_distance_km,
+            executed_distance_km=(
+                session.total_distance_km
+            ),
             planned_duration_min=planned_duration_min,
-            executed_duration_min=session.total_duration_min,
+            executed_duration_min=(
+                session.total_duration_min
+            ),
             athlete_feedback=athlete_feedback,
             evidence=evidence,
             warnings=warnings,
+        )
+
+    def _serialize_feedback(
+        self,
+        feedback: WorkoutFeedback | None,
+    ) -> dict | None:
+        if feedback is None:
+            return None
+
+        return {
+            "perceived_effort": (
+                feedback.perceived_effort
+            ),
+            "execution_feeling": (
+                feedback.execution_feeling
+            ),
+            "comment": (
+                feedback.comment
+            ),
+        }
+
+    def _apply_execution_structure(
+        self,
+        *,
+        execution_structure: dict | None,
+        planned_workout: Any | None,
+        evidence: list[str],
+        warnings: list[str],
+    ) -> None:
+        if not execution_structure:
+            return
+
+        summary = (
+            execution_structure.get(
+                "summary"
+            )
+            or {}
+        )
+
+        fast_finish = (
+            summary.get(
+                "fast_finish"
+            )
+            or {}
+        )
+
+        if not fast_finish.get(
+            "detected"
+        ):
+            return
+
+        distance_km = (
+            fast_finish.get(
+                "distance_km"
+            )
+        )
+
+        pace_improvement = (
+            fast_finish.get(
+                "pace_improvement_percent"
+            )
+        )
+
+        evidence_text = (
+            "Fast finish detected"
+        )
+
+        if distance_km is not None:
+            evidence_text += (
+                f" over the final "
+                f"{distance_km:.1f} km"
+            )
+
+        if pace_improvement is not None:
+            evidence_text += (
+                f", approximately "
+                f"{pace_improvement:.1f}% faster "
+                f"than the preceding pace"
+            )
+
+        evidence_text += "."
+
+        evidence.append(
+            evidence_text
+        )
+
+        if (
+            planned_workout is not None
+            and self._plan_expected_easy_throughout(
+                planned_workout
+            )
+        ):
+            warnings.append(
+                "Fast finish changed the structure of a session "
+                "that was planned to remain easy throughout."
+            )
+
+    def _plan_expected_easy_throughout(
+        self,
+        planned_workout: Any,
+    ) -> bool:
+        planned_type = (
+            planned_workout.workout_type
+        )
+
+        if planned_type not in {
+            "easy_run",
+            "long_run",
+        }:
+            return False
+
+        title = (
+            getattr(
+                planned_workout,
+                "title",
+                "",
+            )
+            or ""
+        )
+
+        description = (
+            getattr(
+                planned_workout,
+                "description",
+                "",
+            )
+            or ""
+        )
+
+        text = (
+            f"{title} {description}"
+            .strip()
+            .lower()
+        )
+
+        easy_markers = {
+            "easy",
+            "spokoj",
+        }
+
+        return any(
+            marker in text
+            for marker in easy_markers
         )
 
     def _intent_match(
@@ -193,7 +401,9 @@ class WorkoutExecutionReviewEngine:
         planned_workout: Any,
         executed_type: str,
     ) -> bool:
-        planned_type = planned_workout.workout_type
+        planned_type = (
+            planned_workout.workout_type
+        )
 
         if planned_type == executed_type:
             return True
@@ -205,7 +415,8 @@ class WorkoutExecutionReviewEngine:
             return True
 
         if (
-            executed_type in self.CROSS_TRAIN_TYPES
+            executed_type
+            in self.CROSS_TRAIN_TYPES
             and self._plan_mentions_cross_training(
                 planned_workout
             )
@@ -220,7 +431,8 @@ class WorkoutExecutionReviewEngine:
         executed_type: str,
     ) -> float | None:
         is_composite_strength_cross = (
-            planned_workout.workout_type == "strength"
+            planned_workout.workout_type
+            == "strength"
             and self._plan_mentions_cross_training(
                 planned_workout
             )
@@ -230,13 +442,18 @@ class WorkoutExecutionReviewEngine:
             if executed_type == "strength":
                 return None
 
-            if executed_type in self.CROSS_TRAIN_TYPES:
+            if (
+                executed_type
+                in self.CROSS_TRAIN_TYPES
+            ):
                 return (
-                    planned_workout.planned_duration_min
+                    planned_workout
+                    .planned_duration_min
                 )
 
         return (
-            planned_workout.planned_duration_min
+            planned_workout
+            .planned_duration_min
         )
 
     def _plan_mentions_cross_training(
@@ -294,7 +511,10 @@ class WorkoutExecutionReviewEngine:
         ):
             return None
 
-        ratio = executed / planned
+        ratio = (
+            executed
+            / planned
+        )
 
         if ratio < self.TOO_LOW_RATIO:
             return "low"
@@ -341,7 +561,10 @@ class WorkoutExecutionReviewEngine:
         }:
             return athlete_feedback
 
-        if athlete_feedback == "on_target":
+        if (
+            athlete_feedback
+            == "on_target"
+        ):
             if objective_status in {
                 "on_target",
                 "insufficient_evidence",
@@ -362,8 +585,10 @@ class WorkoutExecutionReviewEngine:
         )
 
         has_volume_target = (
-            planned_distance_km is not None
-            or planned_duration_min is not None
+            planned_distance_km
+            is not None
+            or planned_duration_min
+            is not None
         )
 
         if has_volume_target:

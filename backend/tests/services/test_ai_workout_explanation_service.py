@@ -1,58 +1,82 @@
 import json
 
-from app.models.today_explanation import (
-    TodayExplanation,
+from app.models.workout_explanation import (
+    WorkoutExplanation,
 )
-from app.services.ai_today_explanation_service import (
-    AITodayExplanationService,
+from app.services.ai_workout_explanation_service import (
+    AIWorkoutExplanationService,
 )
 
 
-class FakeExplanationService:
+SESSION_ID = (
+    "session:intervals_icu:i186147008"
+)
+
+
+class FakeWorkoutExplanationService:
     def __init__(self):
+        self.received_session_id = None
         self.received_target_date = None
 
     def build(
         self,
-        target_date,
+        session_id,
+        target_date=None,
     ):
+        self.received_session_id = (
+            session_id
+        )
+
         self.received_target_date = (
             target_date
         )
 
-        return TodayExplanation(
+        return WorkoutExplanation(
+            session_id=SESSION_ID,
             target_date="2026-09-13",
-            status="ready",
-            decision="do_as_planned",
-            recommendation_type=(
-                "as_planned"
-            ),
+            status="on_target",
             confidence=0.9,
-            key_reasons=[
+            planned_workout={
+                "title": "Long",
+                "workout_type": (
+                    "long_run"
+                ),
+                "planned_distance_km": (
+                    17.0
+                ),
+            },
+            executed_workout={
+                "workout_type": (
+                    "easy_run"
+                ),
+                "distance_km": 17.05,
+                "duration_min": 87.8,
+            },
+            athlete_feedback={
+                "perceived_effort": 6.0,
+                "execution_feeling": (
+                    "on_target"
+                ),
+                "comment": (
+                    "Spokojnie i pod kontrolą."
+                ),
+            },
+            key_evidence=[
                 (
-                    "No strong recovery "
-                    "or fatigue signal requires "
-                    "a training change."
-                )
+                    "Workout intent matched "
+                    "the planned session."
+                ),
+                (
+                    "Executed distance was "
+                    "within the target range."
+                ),
             ],
             warnings=[],
             uncertainties=[],
             context={
-                "goal": {
-                    "distance_km": 10,
-                    "target_time_sec": 2310,
-                },
-                "today": {
-                    "planned_workout": {
-                        "title": "Long",
-                        "workout_type": (
-                            "long_run"
-                        ),
-                        "planned_distance_km": (
-                            17.0
-                        ),
-                    }
-                },
+                "review": {
+                    "status": "on_target",
+                }
             },
         )
 
@@ -77,9 +101,8 @@ class FakeLLMClient:
         )
 
         return (
-            "Możesz wykonać "
-            "dzisiejszy trening "
-            "zgodnie z planem."
+            "Trening został wykonany "
+            "zgodnie z założeniami."
         )
 
 
@@ -114,7 +137,7 @@ class FakeCacheService:
             payload
         )
 
-        return "context-hash"
+        return "workout-context-hash"
 
     def get(
         self,
@@ -140,9 +163,9 @@ class FakeCacheService:
         )
 
 
-def test_builds_ai_explanation_on_cache_miss():
+def test_builds_ai_workout_explanation_on_cache_miss():
     explanation_service = (
-        FakeExplanationService()
+        FakeWorkoutExplanationService()
     )
 
     llm_client = (
@@ -153,7 +176,7 @@ def test_builds_ai_explanation_on_cache_miss():
         FakeCacheService()
     )
 
-    service = AITodayExplanationService(
+    service = AIWorkoutExplanationService(
         explanation_service=(
             explanation_service
         ),
@@ -164,29 +187,28 @@ def test_builds_ai_explanation_on_cache_miss():
     )
 
     result = service.build(
+        session_id=SESSION_ID,
         target_date="2026-09-13",
     )
 
     assert (
         result
         == (
-            "Możesz wykonać "
-            "dzisiejszy trening "
-            "zgodnie z planem."
+            "Trening został wykonany "
+            "zgodnie z założeniami."
         )
+    )
+
+    assert (
+        explanation_service
+        .received_session_id
+        == SESSION_ID
     )
 
     assert (
         explanation_service
         .received_target_date
         == "2026-09-13"
-    )
-
-    assert (
-        cache_service.get_calls
-        == [
-            "context-hash"
-        ]
     )
 
     assert (
@@ -208,24 +230,35 @@ def test_builds_ai_explanation_on_cache_miss():
     )
 
     assert (
-        payload["decision"]
-        == "do_as_planned"
-    )
-
-    assert (
-        payload["confidence"]
-        == 0.9
+        payload["status"]
+        == "on_target"
     )
 
     assert (
         payload[
-            "context"
+            "planned_workout"
         ][
-            "goal"
-        ][
-            "target_time_sec"
+            "planned_distance_km"
         ]
-        == 2310
+        == 17.0
+    )
+
+    assert (
+        payload[
+            "executed_workout"
+        ][
+            "distance_km"
+        ]
+        == 17.05
+    )
+
+    assert (
+        payload[
+            "athlete_feedback"
+        ][
+            "perceived_effort"
+        ]
+        == 6.0
     )
 
     assert (
@@ -244,7 +277,7 @@ def test_builds_ai_explanation_on_cache_miss():
         save_call[
             "explanation_type"
         ]
-        == "today"
+        == "workout"
     )
 
     assert (
@@ -258,7 +291,7 @@ def test_builds_ai_explanation_on_cache_miss():
         save_call[
             "context_hash"
         ]
-        == "context-hash"
+        == "workout-context-hash"
     )
 
     assert (
@@ -276,11 +309,7 @@ def test_builds_ai_explanation_on_cache_miss():
     )
 
 
-def test_returns_cached_explanation_without_calling_llm():
-    explanation_service = (
-        FakeExplanationService()
-    )
-
+def test_returns_cached_workout_explanation_without_llm():
     llm_client = (
         FakeLLMClient()
     )
@@ -288,14 +317,14 @@ def test_returns_cached_explanation_without_calling_llm():
     cache_service = (
         FakeCacheService(
             cached_text=(
-                "Cached explanation."
+                "Cached workout explanation."
             )
         )
     )
 
-    service = AITodayExplanationService(
+    service = AIWorkoutExplanationService(
         explanation_service=(
-            explanation_service
+            FakeWorkoutExplanationService()
         ),
         llm_client=llm_client,
         cache_service=(
@@ -304,12 +333,12 @@ def test_returns_cached_explanation_without_calling_llm():
     )
 
     result = service.build(
-        target_date="2026-09-13",
+        session_id=SESSION_ID,
     )
 
     assert (
         result
-        == "Cached explanation."
+        == "Cached workout explanation."
     )
 
     assert (
@@ -327,16 +356,16 @@ def test_returns_cached_explanation_without_calling_llm():
     )
 
 
-def test_context_hash_receives_complete_payload():
+def test_workout_context_hash_receives_complete_payload():
     cache_service = (
         FakeCacheService(
             cached_text="Cached."
         )
     )
 
-    service = AITodayExplanationService(
+    service = AIWorkoutExplanationService(
         explanation_service=(
-            FakeExplanationService()
+            FakeWorkoutExplanationService()
         ),
         llm_client=(
             FakeLLMClient()
@@ -347,7 +376,7 @@ def test_context_hash_receives_complete_payload():
     )
 
     service.build(
-        target_date="2026-09-13",
+        session_id=SESSION_ID,
     )
 
     assert (
@@ -364,25 +393,23 @@ def test_context_hash_receives_complete_payload():
 
     assert (
         payload[
-            "target_date"
+            "session_id"
         ]
-        == "2026-09-13"
+        == SESSION_ID
     )
 
     assert (
         payload[
             "status"
         ]
-        == "ready"
+        == "on_target"
     )
 
     assert (
         payload[
-            "context"
+            "athlete_feedback"
         ][
-            "goal"
-        ][
-            "distance_km"
+            "execution_feeling"
         ]
-        == 10
+        == "on_target"
     )

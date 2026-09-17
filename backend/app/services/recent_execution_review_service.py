@@ -5,6 +5,9 @@ from typing import Callable
 
 from sqlalchemy.orm import Session
 
+from app.analysis.executed_workout_structure_analyzer import (
+    ExecutedWorkoutStructureAnalyzer,
+)
 from app.db.database import SessionLocal
 from app.db.models import WorkoutDB
 from app.engine.existing_plan_importer import (
@@ -36,6 +39,7 @@ class RecentExecutionReviewService:
     -> CompositeSessionBuilder
     -> plan matching
     -> athlete feedback
+    -> executed workout structure
     -> WorkoutExecutionReviewEngine
 
     The result is designed to be consumed directly by the API
@@ -54,6 +58,7 @@ class RecentExecutionReviewService:
         session_builder=None,
         feedback_service=None,
         review_engine=None,
+        structure_analyzer=None,
     ):
         self.session_factory = session_factory
 
@@ -87,6 +92,12 @@ class RecentExecutionReviewService:
             review_engine
             if review_engine is not None
             else WorkoutExecutionReviewEngine()
+        )
+
+        self.structure_analyzer = (
+            structure_analyzer
+            if structure_analyzer is not None
+            else ExecutedWorkoutStructureAnalyzer()
         )
 
     def build(
@@ -160,10 +171,17 @@ class RecentExecutionReviewService:
             session_id=session.session_id
         )
 
+        execution_structure = (
+            self._build_execution_structure(
+                session
+            )
+        )
+
         review = self.review_engine.review(
             session=session,
             planned_workout=planned_workout,
             feedback=feedback,
+            execution_structure=execution_structure,
         )
 
         return {
@@ -200,6 +218,9 @@ class RecentExecutionReviewService:
                 self._serialize_plan(
                     planned_workout
                 )
+            ),
+            "execution_structure": (
+                execution_structure
             ),
             "review": {
                 "status": review.status,
@@ -242,6 +263,188 @@ class RecentExecutionReviewService:
             },
         }
 
+    def _build_execution_structure(
+        self,
+        session: ExecutedSession,
+    ) -> dict | None:
+        if (
+            session.sport_family
+            != "running"
+        ):
+            return None
+
+        source_files = (
+            session.source_files
+            or []
+        )
+
+        if not source_files:
+            return None
+
+        structures = []
+
+        for workout_file in source_files:
+            structure = (
+                self.structure_analyzer
+                .analyze(
+                    workout_file
+                )
+            )
+
+            structures.append(
+                structure
+            )
+
+        if len(structures) == 1:
+            return structures[0]
+
+        return (
+            self._merge_execution_structures(
+                structures
+            )
+        )
+
+    def _merge_execution_structures(
+        self,
+        structures: list[dict],
+    ) -> dict:
+        segments = []
+
+        warnings = []
+
+        laps_count = 0
+
+        fast_finishes = []
+
+        detected_types = []
+
+        confidences = []
+
+        for structure in structures:
+            segments.extend(
+                structure.get(
+                    "segments",
+                    []
+                )
+            )
+
+            summary = (
+                structure.get(
+                    "summary"
+                )
+                or {}
+            )
+
+            laps_count += (
+                summary.get(
+                    "laps_count",
+                    0
+                )
+                or 0
+            )
+
+            warnings.extend(
+                summary.get(
+                    "warnings",
+                    []
+                )
+                or []
+            )
+
+            detected_type = (
+                summary.get(
+                    "detected_type"
+                )
+            )
+
+            if detected_type:
+                detected_types.append(
+                    detected_type
+                )
+
+            confidence = (
+                summary.get(
+                    "confidence"
+                )
+            )
+
+            if confidence is not None:
+                confidences.append(
+                    confidence
+                )
+
+            fast_finish = (
+                summary.get(
+                    "fast_finish"
+                )
+                or {}
+            )
+
+            if fast_finish.get(
+                "detected"
+            ):
+                fast_finishes.append(
+                    fast_finish
+                )
+
+        best_fast_finish = (
+            fast_finishes[-1]
+            if fast_finishes
+            else {
+                "detected": False
+            }
+        )
+
+        detected_type = (
+            detected_types[-1]
+            if detected_types
+            else "unknown"
+        )
+
+        confidence = (
+            max(confidences)
+            if confidences
+            else 0.2
+        )
+
+        return {
+            "workout_file": None,
+            "source_files": [
+                structure.get(
+                    "workout_file"
+                )
+                for structure in structures
+                if structure.get(
+                    "workout_file"
+                )
+            ],
+            "segments": segments,
+            "summary": {
+                "laps_count": (
+                    laps_count
+                ),
+                "detected_type": (
+                    detected_type
+                ),
+                "confidence": (
+                    confidence
+                ),
+                "classification_method": (
+                    "merged_lap_pattern"
+                ),
+                "fast_finish": (
+                    best_fast_finish
+                ),
+                "warnings": (
+                    list(
+                        dict.fromkeys(
+                            warnings
+                        )
+                    )
+                ),
+            },
+        }
+
     def _match_plan(
         self,
         session: ExecutedSession,
@@ -279,7 +482,9 @@ class RecentExecutionReviewService:
             planned_workout.workout_type
         )
 
-        executed_type = session.workout_type
+        executed_type = (
+            session.workout_type
+        )
 
         if planned_type == executed_type:
             return 100
@@ -336,7 +541,9 @@ class RecentExecutionReviewService:
         range_start: date,
         range_end: date,
     ) -> list:
-        rows = self.plan_source.fetch_rows()
+        rows = (
+            self.plan_source.fetch_rows()
+        )
 
         workouts = (
             self.plan_importer.import_rows(
@@ -360,13 +567,15 @@ class RecentExecutionReviewService:
         limit: int,
     ) -> list[WorkoutDB]:
         end_datetime = datetime.combine(
-            target_date + timedelta(days=1),
+            target_date
+            + timedelta(days=1),
             datetime.min.time(),
         )
 
         candidate_limit = max(
             self.MIN_RAW_ACTIVITY_CANDIDATES,
-            limit * self.RAW_ACTIVITY_MULTIPLIER,
+            limit
+            * self.RAW_ACTIVITY_MULTIPLIER,
         )
 
         db = self.session_factory()
@@ -381,12 +590,16 @@ class RecentExecutionReviewService:
                 .order_by(
                     WorkoutDB.start_time.desc()
                 )
-                .limit(candidate_limit)
+                .limit(
+                    candidate_limit
+                )
                 .all()
             )
 
             return list(
-                reversed(workouts)
+                reversed(
+                    workouts
+                )
             )
 
         finally:
@@ -431,10 +644,16 @@ class RecentExecutionReviewService:
         if value is None:
             return date.today()
 
-        if isinstance(value, datetime):
+        if isinstance(
+            value,
+            datetime,
+        ):
             return value.date()
 
-        if isinstance(value, date):
+        if isinstance(
+            value,
+            date,
+        ):
             return value
 
         return date.fromisoformat(

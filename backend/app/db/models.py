@@ -215,3 +215,51 @@ class AthleteMemoryDB(Base):
         DateTime,
         nullable=False,
     )
+
+class AIExplanationDB(Base):
+    __tablename__ = "ai_explanations"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    explanation_type = Column(
+        String,
+        nullable=False,
+        index=True,
+    )
+
+    target_date = Column(
+        DateTime,
+        nullable=False,
+        index=True,
+    )
+
+    context_hash = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    model = Column(
+        String,
+        nullable=False,
+    )
+
+    explanation_text = Column(
+        Text,
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+    )
+
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+    )
