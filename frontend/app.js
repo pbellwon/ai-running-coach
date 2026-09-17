@@ -1226,7 +1226,8 @@ function createRecentWorkoutCard(
         "recent-workout-title";
 
     title.textContent =
-        item.planned_workout?.title
+        item.planned_workout?.description
+        || item.planned_workout?.title
         || formatWorkoutType(
             item.workout_type
         );
@@ -1310,10 +1311,24 @@ function createRecentWorkoutCard(
         );
     }
 
+    const plannedWorkoutName =
+        item.planned_workout?.description
+        || item.planned_workout?.title
+        || null;
+
     const planSummary =
         buildRecentPlanSummary(
             item
         );
+
+    if (plannedWorkoutName) {
+        details.appendChild(
+            createRecentWorkoutDetail(
+                "Planned",
+                plannedWorkoutName
+            )
+        );
+    }
 
     if (planSummary) {
         details.appendChild(
