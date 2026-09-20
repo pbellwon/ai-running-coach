@@ -33,7 +33,6 @@ async function loadDashboard() {
 
     await Promise.all([
         loadToday(),
-        loadAIExplanation(),
         loadTrainingOverview(),
         loadRecentWorkouts(),
     ]);
@@ -219,7 +218,7 @@ function ensureAICoachCard() {
                 color: #9ca3af;
             "
         >
-            Loading coach explanation...
+            Kliknij przycisk, aby poprosić trenera o komentarz.
         </p>
 
         <div
@@ -233,6 +232,36 @@ function ensureAICoachCard() {
             "
         ></div>
     `;
+
+    const coachButton =
+        document.createElement("button");
+
+    coachButton.type = "button";
+    coachButton.textContent = "Zapytaj trenera";
+    coachButton.className = "coach-request-button";
+
+    coachButton.style.marginTop = "16px";
+    coachButton.style.padding = "10px 16px";
+    coachButton.style.cursor = "pointer";
+
+    coachButton.addEventListener(
+        "click",
+        async () => {
+            coachButton.disabled = true;
+            coachButton.textContent =
+                "Przygotowuję komentarz...";
+
+            try {
+                await loadAIExplanation();
+            } finally {
+                coachButton.disabled = false;
+                coachButton.textContent =
+                    "Zapytaj trenera";
+            }
+        }
+    );
+
+    card.appendChild(coachButton);
 
     dashboard.insertBefore(
         card,
@@ -1354,10 +1383,43 @@ function createRecentWorkoutCard(
         aiReviewSection
     );
 
-    loadAIWorkoutExplanation(
-        item.session_id,
-        item.date,
-        aiReviewSection
+    const reviewButton =
+        document.createElement("button");
+
+    reviewButton.type = "button";
+    reviewButton.textContent =
+        "Przeanalizuj trening";
+
+    reviewButton.className =
+        "coach-request-button";
+
+    reviewButton.style.marginTop = "12px";
+    reviewButton.style.padding = "10px 16px";
+    reviewButton.style.cursor = "pointer";
+
+    reviewButton.addEventListener(
+        "click",
+        async () => {
+            reviewButton.disabled = true;
+            reviewButton.textContent =
+                "Analizuję trening...";
+
+            try {
+                await loadAIWorkoutExplanation(
+                    item.session_id,
+                    item.date,
+                    aiReviewSection
+                );
+            } finally {
+                reviewButton.disabled = false;
+                reviewButton.textContent =
+                    "Przeanalizuj trening";
+            }
+        }
+    );
+
+    aiReviewSection.appendChild(
+        reviewButton
     );
 
     const feedbackSection =
@@ -1502,7 +1564,7 @@ function createAIWorkoutReviewSection() {
         "workout-ai-review-state";
 
     state.textContent =
-        "Preparing review…";
+        "Kliknij przycisk, aby poprosić trenera o analizę treningu.";
 
     state.style.margin =
         "12px 0 0 0";
