@@ -82,6 +82,9 @@ class IntervalsLapMapper:
             lap_number=lap_number,
             distance_m=distance_m,
             elapsed_time_sec=elapsed_time_sec,
+            moving_time_sec=self._as_float(
+                interval.get("moving_time")
+            ),
             avg_hr=self._as_float(
                 interval.get(
                     "average_heartrate"

@@ -1,3 +1,4 @@
+
 from statistics import mean, median
 
 from app.db.database import SessionLocal
@@ -7,111 +8,75 @@ from app.db.models import LapDB
 class ExecutedWorkoutStructureAnalyzer:
 
     FAST_FINISH_MIN_LEAD_IN_KM = 5.0
-
     FAST_FINISH_MIN_LAP_DISTANCE_M = 800
     FAST_FINISH_MAX_LAP_DISTANCE_M = 1200
-
     FAST_FINISH_MIN_PACE_IMPROVEMENT = 0.12
+
+    THRESHOLD_BLOCK_MIN_SEC = 480
+    THRESHOLD_BLOCK_MAX_SEC = 720
+    THRESHOLD_FRAGMENT_MIN_SEC = 60
+    THRESHOLD_FRAGMENT_MAX_SEC = 360
+    THRESHOLD_FRAGMENT_MAX_PACE = 270
+    TECHNICAL_SPLIT_MAX_SEC = 5
 
     def analyze(
         self,
         workout_file: str,
     ) -> dict:
-
         db = SessionLocal()
 
         try:
             laps = (
                 db.query(LapDB)
                 .filter(
-                    LapDB.workout_file
-                    == workout_file
+                    LapDB.workout_file == workout_file
                 )
-                .order_by(
-                    LapDB.lap_number.asc()
-                )
+                .order_by(LapDB.lap_number.asc())
                 .all()
             )
-
         finally:
             db.close()
 
         if not laps:
             return {
-                "workout_file":
-                    workout_file,
-
+                "workout_file": workout_file,
                 "segments": [],
-
                 "summary": {
                     "laps_count": 0,
-
-                    "detected_type":
-                        "unknown",
-
-                    "confidence":
-                        0.2,
-
-                    "classification_method":
-                        "lap_pattern",
-
-                    "fast_finish": {
-                        "detected":
-                            False,
-                    },
-
+                    "detected_type": "unknown",
+                    "confidence": 0.2,
+                    "classification_method": "lap_pattern",
+                    "fast_finish": {"detected": False},
                     "warnings": [
-                        (
-                            "No laps found "
-                            "for this workout."
-                        ),
+                        "No laps found for this workout."
                     ],
                 },
             }
 
-        fast_finish = (
-            self._detect_fast_finish(
-                laps
-            )
-        )
+        fast_finish = self._detect_fast_finish(laps)
 
         continuous_tempo_blocks = (
-            self._find_continuous_tempo_blocks(
-                laps
-            )
+            self._find_continuous_tempo_blocks(laps)
         )
 
         threshold_blocks = (
-            self._find_threshold_blocks(
-                laps
-            )
+            self._find_threshold_blocks(laps)
         )
 
         tempo_block_lap_numbers = {
             lap.lap_number
-
-            for block
-            in continuous_tempo_blocks
-
-            for lap
-            in block
+            for block in continuous_tempo_blocks
+            for lap in block
         }
 
         threshold_block_lap_numbers = {
             lap.lap_number
-
-            for block
-            in threshold_blocks
-
-            for lap
-            in block
+            for block in threshold_blocks
+            for lap in block
         }
 
         fast_finish_lap_numbers = set(
-            fast_finish.get(
-                "lap_numbers",
-                [],
-            )
+            fast_finish.get("lap_numbers", [])
         )
 
         easy_laps = []
@@ -123,139 +88,395 @@ class ExecutedWorkoutStructureAnalyzer:
         hill_candidate_laps = []
 
         for lap in laps:
-
-            if (
-                lap.lap_number
-                in threshold_block_lap_numbers
-            ):
+            if lap.lap_number in threshold_block_lap_numbers:
                 continue
 
-            if (
-                lap.lap_number
-                in tempo_block_lap_numbers
-            ):
+            if lap.lap_number in tempo_block_lap_numbers:
                 continue
 
-            if (
-                lap.lap_number
-                in fast_finish_lap_numbers
-            ):
+            if lap.lap_number in fast_finish_lap_numbers:
                 continue
 
-            distance_m = (
-                lap.distance_m
-                or 0
-            )
+            distance_m = lap.distance_m or 0
+            duration_sec = lap.elapsed_time_sec or 0
 
-            duration_sec = (
-                lap.elapsed_time_sec
-                or 0
-            )
-
-            if (
-                distance_m <= 0
-                or duration_sec <= 0
-            ):
+            if distance_m <= 0 or duration_sec <= 0:
                 continue
 
             pace_sec_per_km = (
-                duration_sec
-                / (
-                    distance_m
-                    / 1000
+                duration_sec / (distance_m / 1000)
+            )
+
+            avg_hr = lap.avg_hr or 0
+
+            if (
+                70 <= distance_m <= 150
+                and 10 <= duration_sec <= 35
+            ):
+                stride_laps.append(lap)
+
+            elif (
+                45 <= duration_sec <= 180
+                and 150 <= distance_m <= 800
+                and pace_sec_per_km <= 270
+            ):
+                vo2max_laps.append(lap)
+
+            elif (
+                20 <= duration_sec <= 120
+                and 50 <= distance_m <= 400
+                and avg_hr >= 145
+                and pace_sec_per_km <= 330
+            ):
+                hill_candidate_laps.append(lap)
+
+            elif (
+                180 <= duration_sec <= 720
+                and pace_sec_per_km <= 255
+            ):
+                threshold_laps.append(lap)
+
+            elif (
+                360 <= duration_sec <= 1200
+                and pace_sec_per_km <= 285
+            ):
+                tempo_laps.append(lap)
+
+            elif (
+                70 <= distance_m <= 500
+                and pace_sec_per_km >= 330
+            ):
+                recovery_laps.append(lap)
+
+            elif (
+                distance_m >= 800
+                and pace_sec_per_km >= 270
+            ):
+                easy_laps.append(lap)
+
+        detected_type = self._detected_type(
+            easy_laps=easy_laps,
+            tempo_blocks=continuous_tempo_blocks,
+            tempo_laps=tempo_laps,
+            threshold_blocks=threshold_blocks,
+            threshold_laps=threshold_laps,
+            vo2max_laps=vo2max_laps,
+            hill_candidate_laps=hill_candidate_laps,
+            stride_laps=stride_laps,
+            fast_finish=fast_finish,
+        )
+
+        if (
+            threshold_blocks
+            and detected_type == "threshold"
+        ):
+            segments = (
+                self._build_ordered_threshold_segments(
+                    laps=laps,
+                    threshold_blocks=threshold_blocks,
                 )
+            )
+
+        else:
+            segments = self._build_legacy_segments(
+                easy_laps=easy_laps,
+                continuous_tempo_blocks=(
+                    continuous_tempo_blocks
+                ),
+                tempo_laps=tempo_laps,
+                threshold_blocks=threshold_blocks,
+                threshold_laps=threshold_laps,
+                vo2max_laps=vo2max_laps,
+                hill_candidate_laps=hill_candidate_laps,
+                stride_laps=stride_laps,
+                recovery_laps=recovery_laps,
+                fast_finish=fast_finish,
+            )
+
+        classification = self._classification_summary(
+            detected_type=detected_type,
+            tempo_blocks=continuous_tempo_blocks,
+            tempo_laps=tempo_laps,
+            threshold_laps=threshold_laps,
+            vo2max_laps=vo2max_laps,
+            hill_candidate_laps=hill_candidate_laps,
+            fast_finish=fast_finish,
+        )
+
+        return {
+            "workout_file": workout_file,
+            "segments": segments,
+            "summary": {
+                "laps_count": len(laps),
+                "detected_type": detected_type,
+                "confidence": classification["confidence"],
+                "classification_method": (
+                    classification["classification_method"]
+                ),
+                "fast_finish": fast_finish,
+                "warnings": classification["warnings"],
+            },
+        }
+
+    def _build_ordered_threshold_segments(
+        self,
+        laps: list[LapDB],
+        threshold_blocks: list[list[LapDB]],
+    ) -> list[dict]:
+        """
+        Convert measurement laps into ordered workout segments.
+
+        This method does not interpret every autolap as
+        an independent repetition.
+
+        Only gaps between threshold blocks are recoveries.
+        A short gap after the final block, followed by
+        a substantial easy section, is a transition.
+        """
+        if not laps or not threshold_blocks:
+            return []
+
+        ordered_laps = sorted(
+            laps,
+            key=lambda lap: lap.lap_number,
+        )
+
+        ordered_blocks = sorted(
+            threshold_blocks,
+            key=lambda block: block[0].lap_number,
+        )
+
+        positions = {
+            lap.lap_number: index
+            for index, lap in enumerate(ordered_laps)
+        }
+
+        segments = []
+
+        first_block = ordered_blocks[0]
+        first_index = positions[
+            first_block[0].lap_number
+        ]
+
+        warmup_laps = ordered_laps[:first_index]
+
+        if warmup_laps:
+            segments.append(
+                self._build_ordered_segment(
+                    segment="warmup",
+                    laps=warmup_laps,
+                    intensity="easy",
+                )
+            )
+
+        for block_index, block in enumerate(
+            ordered_blocks
+        ):
+            segments.append(
+                self._build_ordered_segment(
+                    segment="threshold_block",
+                    laps=block,
+                    intensity="threshold",
+                )
+            )
+
+            block_end_index = positions[
+                block[-1].lap_number
+            ]
+
+            if block_index + 1 < len(ordered_blocks):
+                next_block = ordered_blocks[
+                    block_index + 1
+                ]
+
+                next_start_index = positions[
+                    next_block[0].lap_number
+                ]
+
+                between_laps = ordered_laps[
+                    block_end_index + 1:
+                    next_start_index
+                ]
+
+                if between_laps:
+                    segments.append(
+                        self._build_ordered_segment(
+                            segment="recovery",
+                            laps=between_laps,
+                            intensity="recovery",
+                        )
+                    )
+
+                continue
+
+            trailing_laps = ordered_laps[
+                block_end_index + 1:
+            ]
+
+            if not trailing_laps:
+                continue
+
+            transition_laps = []
+            cooldown_laps = trailing_laps
+
+            first_trailing = trailing_laps[0]
+            first_trailing_duration = (
+                first_trailing.elapsed_time_sec or 0
+            )
+
+            remaining_laps = trailing_laps[1:]
+
+            remaining_duration = sum(
+                lap.elapsed_time_sec or 0
+                for lap in remaining_laps
+            )
+
+            # A short jog immediately after the final
+            # repetition is distinguished from the
+            # subsequent sustained cool-down.
+            #
+            # If no sustained cool-down follows,
+            # the trailing section is left intact.
+            if (
+                remaining_laps
+                and 30 <= first_trailing_duration <= 180
+                and remaining_duration >= 300
+            ):
+                transition_laps = [first_trailing]
+                cooldown_laps = remaining_laps
+
+            if transition_laps:
+                segments.append(
+                    self._build_ordered_segment(
+                        segment="transition",
+                        laps=transition_laps,
+                        intensity="easy",
+                    )
+                )
+
+            if cooldown_laps:
+                segments.append(
+                    self._build_ordered_segment(
+                        segment="cooldown",
+                        laps=cooldown_laps,
+                        intensity="easy",
+                    )
+                )
+
+        return segments
+
+    def _build_ordered_segment(
+            self,
+            segment: str,
+            laps: list[LapDB],
+            intensity: str,
+        ) -> dict:
+            total_elapsed_sec = sum(
+                lap.elapsed_time_sec or 0
+                for lap in laps
+            )
+
+            total_distance_m = sum(
+                lap.distance_m or 0
+                for lap in laps
+            )
+
+            # Do not silently treat elapsed time as moving time.
+            # Older laps may not have moving_time_sec populated.
+            has_complete_moving_time = all(
+                lap.moving_time_sec is not None
+                for lap in laps
+            )
+
+            total_moving_sec = (
+                sum(
+                    lap.moving_time_sec
+                    for lap in laps
+                )
+                if has_complete_moving_time
+                else None
+            )
+
+            valid_hr_laps = [
+                lap
+                for lap in laps
+                if (
+                    lap.avg_hr is not None
+                    and (lap.elapsed_time_sec or 0) > 0
+                )
+            ]
+
+            hr_duration_sec = sum(
+                lap.elapsed_time_sec
+                for lap in valid_hr_laps
             )
 
             avg_hr = (
-                lap.avg_hr
-                or 0
+                round(
+                    sum(
+                        lap.avg_hr * lap.elapsed_time_sec
+                        for lap in valid_hr_laps
+                    ) / hr_duration_sec,
+                    1,
+                )
+                if hr_duration_sec > 0
+                else None
             )
 
-            if (
-                70
-                <= distance_m
-                <= 150
-                and 10
-                <= duration_sec
-                <= 35
-            ):
-                stride_laps.append(
-                    lap
+            avg_moving_pace = (
+                round(
+                    total_moving_sec
+                    / (total_distance_m / 1000),
+                    1,
                 )
-
-            elif (
-                45
-                <= duration_sec
-                <= 180
-                and 150
-                <= distance_m
-                <= 800
-                and pace_sec_per_km
-                <= 270
-            ):
-                vo2max_laps.append(
-                    lap
+                if (
+                    total_moving_sec is not None
+                    and total_moving_sec > 0
+                    and total_distance_m > 0
                 )
+                else None
+            )
 
-            elif (
-                20
-                <= duration_sec
-                <= 120
-                and 50
-                <= distance_m
-                <= 400
-                and avg_hr
-                >= 145
-                and pace_sec_per_km
-                <= 330
-            ):
-                hill_candidate_laps.append(
-                    lap
-                )
+            return {
+                "segment": segment,
+                "lap_numbers": [
+                    lap.lap_number
+                    for lap in laps
+                ],
+                "laps": len(laps),
+                "distance_km": round(
+                    total_distance_m / 1000,
+                    2,
+                ),
+                "duration_sec": total_elapsed_sec,
+                "duration_min": round(
+                    total_elapsed_sec / 60,
+                    1,
+                ),
+                "moving_time_sec": total_moving_sec,
+                "moving_duration_min": (
+                    round(total_moving_sec / 60, 1)
+                    if total_moving_sec is not None
+                    else None
+                ),
+                "avg_pace_sec_per_km": avg_moving_pace,
+                "avg_hr": avg_hr,
+                "intensity": intensity,
+            }
 
-            elif (
-                180
-                <= duration_sec
-                <= 720
-                and pace_sec_per_km
-                <= 255
-            ):
-                threshold_laps.append(
-                    lap
-                )
-
-            elif (
-                360
-                <= duration_sec
-                <= 1200
-                and pace_sec_per_km
-                <= 285
-            ):
-                tempo_laps.append(
-                    lap
-                )
-
-            elif (
-                70
-                <= distance_m
-                <= 500
-                and pace_sec_per_km
-                >= 330
-            ):
-                recovery_laps.append(
-                    lap
-                )
-
-            elif (
-                distance_m
-                >= 800
-                and pace_sec_per_km
-                >= 270
-            ):
-                easy_laps.append(
-                    lap
-                )
-
+    def _build_legacy_segments(
+        self,
+        easy_laps,
+        continuous_tempo_blocks,
+        tempo_laps,
+        threshold_blocks,
+        threshold_laps,
+        vo2max_laps,
+        hill_candidate_laps,
+        stride_laps,
+        recovery_laps,
+        fast_finish,
+    ) -> list[dict]:
         segments = []
 
         if easy_laps:
@@ -267,9 +488,7 @@ class ExecutedWorkoutStructureAnalyzer:
                 )
             )
 
-        for tempo_block in (
-            continuous_tempo_blocks
-        ):
+        for tempo_block in continuous_tempo_blocks:
             segments.append(
                 self._build_distance_segment(
                     segment="tempo_block",
@@ -298,9 +517,7 @@ class ExecutedWorkoutStructureAnalyzer:
         if threshold_laps:
             segments.append(
                 self._build_rep_segment(
-                    segment=(
-                        "threshold_reps"
-                    ),
+                    segment="threshold_reps",
                     laps=threshold_laps,
                     intensity="threshold",
                     distance_unit="km",
@@ -320,15 +537,9 @@ class ExecutedWorkoutStructureAnalyzer:
         if hill_candidate_laps:
             segments.append(
                 self._build_rep_segment(
-                    segment=(
-                        "hill_reps_candidate"
-                    ),
-                    laps=(
-                        hill_candidate_laps
-                    ),
-                    intensity=(
-                        "hills_candidate"
-                    ),
+                    segment="hill_reps_candidate",
+                    laps=hill_candidate_laps,
+                    intensity="hills_candidate",
                     distance_unit="m",
                 )
             )
@@ -353,144 +564,40 @@ class ExecutedWorkoutStructureAnalyzer:
                 )
             )
 
-        if fast_finish.get(
-            "detected"
-        ):
+        if fast_finish.get("detected"):
             segments.append(
                 {
-                    "segment":
-                        "fast_finish",
-
-                    "laps":
-                        fast_finish[
-                            "laps"
-                        ],
-
-                    "distance_km":
-                        fast_finish[
-                            "distance_km"
-                        ],
-
-                    "duration_min":
-                        fast_finish[
-                            "duration_min"
-                        ],
-
-                    "avg_pace_sec_per_km":
+                    "segment": "fast_finish",
+                    "laps": fast_finish["laps"],
+                    "distance_km": (
+                        fast_finish["distance_km"]
+                    ),
+                    "duration_min": (
+                        fast_finish["duration_min"]
+                    ),
+                    "avg_pace_sec_per_km": (
                         fast_finish[
                             "avg_pace_sec_per_km"
-                        ],
-
-                    "avg_hr":
-                        fast_finish[
-                            "avg_hr"
-                        ],
-
-                    "intensity":
-                        "fast_finish",
+                        ]
+                    ),
+                    "avg_hr": fast_finish["avg_hr"],
+                    "intensity": "fast_finish",
                 }
             )
 
-        detected_type = (
-            self._detected_type(
-                easy_laps=easy_laps,
-                tempo_blocks=(
-                    continuous_tempo_blocks
-                ),
-                tempo_laps=tempo_laps,
-                threshold_blocks=(
-                    threshold_blocks
-                ),
-                threshold_laps=(
-                    threshold_laps
-                ),
-                vo2max_laps=(
-                    vo2max_laps
-                ),
-                hill_candidate_laps=(
-                    hill_candidate_laps
-                ),
-                stride_laps=(
-                    stride_laps
-                ),
-                fast_finish=(
-                    fast_finish
-                ),
-            )
-        )
-
-        classification = (
-            self._classification_summary(
-                detected_type=(
-                    detected_type
-                ),
-                tempo_blocks=(
-                    continuous_tempo_blocks
-                ),
-                tempo_laps=(
-                    tempo_laps
-                ),
-                threshold_laps=(
-                    threshold_laps
-                ),
-                vo2max_laps=(
-                    vo2max_laps
-                ),
-                hill_candidate_laps=(
-                    hill_candidate_laps
-                ),
-                fast_finish=(
-                    fast_finish
-                ),
-            )
-        )
-
-        return {
-            "workout_file":
-                workout_file,
-
-            "segments":
-                segments,
-
-            "summary": {
-                "laps_count":
-                    len(laps),
-
-                "detected_type":
-                    detected_type,
-
-                "confidence":
-                    classification[
-                        "confidence"
-                    ],
-
-                "classification_method":
-                    classification[
-                        "classification_method"
-                    ],
-
-                "fast_finish":
-                    fast_finish,
-
-                "warnings":
-                    classification[
-                        "warnings"
-                    ],
-            },
-        }
+        return segments
 
     def _detect_fast_finish(
         self,
         laps,
     ) -> dict:
         """
-        Detects a meaningful fast finish after a substantial
+        Detect a meaningful fast finish after a substantial
         predominantly easy lead-in.
 
-        Short trailing partial laps are ignored. The detector
-        evaluates the final full-sized lap instead.
+        Ignore short trailing partial laps and evaluate
+        the final full-sized lap instead.
         """
-
         default_result = {
             "detected": False,
         }
@@ -517,8 +624,7 @@ class ExecutedWorkoutStructureAnalyzer:
             -1,
         ):
             distance_m = (
-                valid_laps[index].distance_m
-                or 0
+                valid_laps[index].distance_m or 0
             )
 
             if (
@@ -532,24 +638,18 @@ class ExecutedWorkoutStructureAnalyzer:
         if candidate_index is None:
             return default_result
 
-        final_lap = (
-            valid_laps[candidate_index]
-        )
+        final_lap = valid_laps[candidate_index]
 
-        preceding_laps = (
-            valid_laps[:candidate_index]
-        )
+        preceding_laps = valid_laps[:candidate_index]
 
         if not preceding_laps:
             return default_result
 
         preceding_distance_km = (
             sum(
-                lap.distance_m
-                or 0
+                lap.distance_m or 0
                 for lap in preceding_laps
-            )
-            / 1000
+            ) / 1000
         )
 
         if (
@@ -563,60 +663,40 @@ class ExecutedWorkoutStructureAnalyzer:
             for lap in preceding_laps
             if (
                 self.FAST_FINISH_MIN_LAP_DISTANCE_M
-                <= (
-                    lap.distance_m
-                    or 0
-                )
+                <= (lap.distance_m or 0)
                 <= self.FAST_FINISH_MAX_LAP_DISTANCE_M
             )
         ]
 
-        if (
-            len(
-                comparable_preceding_laps
-            )
-            < 3
-        ):
+        if len(comparable_preceding_laps) < 3:
             return default_result
 
         preceding_paces = [
-            (
-                lap.elapsed_time_sec
-                / (
-                    lap.distance_m
-                    / 1000
-                )
-            )
-            for lap
-            in comparable_preceding_laps
+            lap.elapsed_time_sec
+            / (lap.distance_m / 1000)
+            for lap in comparable_preceding_laps
         ]
 
         baseline_pace = float(
-            median(
-                preceding_paces
-            )
+            median(preceding_paces)
         )
 
         if baseline_pace <= 0:
             return default_result
 
         final_distance_m = (
-            final_lap.distance_m
-            or 0
+            final_lap.distance_m or 0
         )
 
         final_pace = (
             final_lap.elapsed_time_sec
-            / (
-                final_distance_m
-                / 1000
-            )
+            / (final_distance_m / 1000)
         )
 
         pace_improvement = (
-            baseline_pace
-            - final_pace
-        ) / baseline_pace
+            (baseline_pace - final_pace)
+            / baseline_pace
+        )
 
         if (
             pace_improvement
@@ -625,27 +705,18 @@ class ExecutedWorkoutStructureAnalyzer:
             return default_result
 
         final_hr = (
-            round(
-                float(
-                    final_lap.avg_hr
-                ),
-                1,
-            )
-            if final_lap.avg_hr
-            is not None
+            round(float(final_lap.avg_hr), 1)
+            if final_lap.avg_hr is not None
             else None
         )
 
         trailing_partial_distance_km = (
             sum(
-                lap.distance_m
-                or 0
-                for lap
-                in valid_laps[
+                lap.distance_m or 0
+                for lap in valid_laps[
                     candidate_index + 1:
                 ]
-            )
-            / 1000
+            ) / 1000
         )
 
         return {
@@ -655,13 +726,11 @@ class ExecutedWorkoutStructureAnalyzer:
                 final_lap.lap_number
             ],
             "distance_km": round(
-                final_distance_m
-                / 1000,
+                final_distance_m / 1000,
                 2,
             ),
             "duration_min": round(
-                final_lap.elapsed_time_sec
-                / 60,
+                final_lap.elapsed_time_sec / 60,
                 1,
             ),
             "avg_pace_sec_per_km": round(
@@ -678,8 +747,7 @@ class ExecutedWorkoutStructureAnalyzer:
                 1,
             ),
             "pace_improvement_percent": round(
-                pace_improvement
-                * 100,
+                pace_improvement * 100,
                 1,
             ),
             "trailing_partial_distance_km": round(
@@ -687,95 +755,58 @@ class ExecutedWorkoutStructureAnalyzer:
                 2,
             ),
         }
+
     def _find_threshold_blocks(
         self,
         laps: list[LapDB],
     ) -> list[list[LapDB]]:
-
-        min_total_sec = 480
-        max_total_sec = 720
-
-        min_work_sec = 60
-        max_work_sec = 360
-
-        max_work_pace_sec_per_km = 270
-
-        max_technical_split_sec = 5
-
         blocks = []
         current_block = []
         work_laps_count = 0
 
         for lap in laps:
+            distance_m = lap.distance_m or 0
+            duration_sec = lap.elapsed_time_sec or 0
 
-            distance_m = (
-                lap.distance_m
-                or 0
-            )
-
-            duration_sec = (
-                lap.elapsed_time_sec
-                or 0
-            )
-
-            if (
-                distance_m <= 0
-                or duration_sec <= 0
-            ):
+            if distance_m <= 0 or duration_sec <= 0:
                 continue
 
             pace_sec_per_km = (
-                duration_sec
-                / (
-                    distance_m
-                    / 1000
-                )
+                duration_sec / (distance_m / 1000)
             )
 
             is_technical_split = (
                 duration_sec
-                <= max_technical_split_sec
+                <= self.TECHNICAL_SPLIT_MAX_SEC
             )
 
             is_threshold_work_fragment = (
-                min_work_sec
+                self.THRESHOLD_FRAGMENT_MIN_SEC
                 <= duration_sec
-                <= max_work_sec
+                <= self.THRESHOLD_FRAGMENT_MAX_SEC
                 and pace_sec_per_km
-                <= max_work_pace_sec_per_km
+                <= self.THRESHOLD_FRAGMENT_MAX_PACE
             )
 
             if is_threshold_work_fragment:
-                current_block.append(
-                    lap
-                )
-
+                current_block.append(lap)
                 work_laps_count += 1
-
                 continue
 
-            if (
-                is_technical_split
-                and current_block
-            ):
-                current_block.append(
-                    lap
-                )
-
+            if is_technical_split and current_block:
+                current_block.append(lap)
                 continue
 
             if current_block:
                 self._append_threshold_block_if_valid(
                     blocks=blocks,
                     block=current_block,
-                    work_laps_count=(
-                        work_laps_count
-                    ),
+                    work_laps_count=work_laps_count,
                     min_total_sec=(
-                        min_total_sec
+                        self.THRESHOLD_BLOCK_MIN_SEC
                     ),
                     max_total_sec=(
-                        max_total_sec
+                        self.THRESHOLD_BLOCK_MAX_SEC
                     ),
                 )
 
@@ -786,19 +817,16 @@ class ExecutedWorkoutStructureAnalyzer:
             self._append_threshold_block_if_valid(
                 blocks=blocks,
                 block=current_block,
-                work_laps_count=(
-                    work_laps_count
-                ),
+                work_laps_count=work_laps_count,
                 min_total_sec=(
-                    min_total_sec
+                    self.THRESHOLD_BLOCK_MIN_SEC
                 ),
                 max_total_sec=(
-                    max_total_sec
+                    self.THRESHOLD_BLOCK_MAX_SEC
                 ),
             )
 
         return blocks
-
 
     def _append_threshold_block_if_valid(
         self,
@@ -808,13 +836,11 @@ class ExecutedWorkoutStructureAnalyzer:
         min_total_sec: int,
         max_total_sec: int,
     ) -> None:
-
         if work_laps_count < 2:
             return
 
         total_duration_sec = sum(
-            lap.elapsed_time_sec
-            or 0
+            lap.elapsed_time_sec or 0
             for lap in block
         )
 
@@ -823,86 +849,44 @@ class ExecutedWorkoutStructureAnalyzer:
             <= total_duration_sec
             <= max_total_sec
         ):
-            blocks.append(
-                list(block)
-            )
-            
+            blocks.append(list(block))
+
     def _find_continuous_tempo_blocks(
         self,
         laps: list[LapDB],
     ) -> list[list[LapDB]]:
-
         blocks = []
         current_block = []
 
         for lap in laps:
+            distance_m = lap.distance_m or 0
+            duration_sec = lap.elapsed_time_sec or 0
+            avg_hr = lap.avg_hr or 0
 
-            distance_m = (
-                lap.distance_m
-                or 0
-            )
-
-            duration_sec = (
-                lap.elapsed_time_sec
-                or 0
-            )
-
-            avg_hr = (
-                lap.avg_hr
-                or 0
-            )
-
-            if (
-                distance_m <= 0
-                or duration_sec <= 0
-            ):
+            if distance_m <= 0 or duration_sec <= 0:
                 continue
 
             pace_sec_per_km = (
-                duration_sec
-                / (
-                    distance_m
-                    / 1000
-                )
+                duration_sec / (distance_m / 1000)
             )
 
             is_tempo_km_lap = (
-                850
-                <= distance_m
-                <= 1100
-                and pace_sec_per_km
-                <= 275
-                and avg_hr
-                >= 155
+                850 <= distance_m <= 1100
+                and pace_sec_per_km <= 275
+                and avg_hr >= 155
             )
 
             if is_tempo_km_lap:
-                current_block.append(
-                    lap
-                )
+                current_block.append(lap)
 
             else:
-                if (
-                    len(
-                        current_block
-                    )
-                    >= 3
-                ):
-                    blocks.append(
-                        current_block
-                    )
+                if len(current_block) >= 3:
+                    blocks.append(current_block)
 
                 current_block = []
 
-        if (
-            len(
-                current_block
-            )
-            >= 3
-        ):
-            blocks.append(
-                current_block
-            )
+        if len(current_block) >= 3:
+            blocks.append(current_block)
 
         return blocks
 
@@ -912,57 +896,31 @@ class ExecutedWorkoutStructureAnalyzer:
         laps: list[LapDB],
         intensity: str | None = None,
     ) -> dict:
-
         result = {
-            "segment":
-                segment,
-
-            "laps":
-                len(laps),
-
-            "distance_km":
-                round(
-                    sum(
-                        (
-                            lap.distance_m
-                            or 0
-                        )
-                        for lap
-                        in laps
-                    )
-                    / 1000,
-                    2,
-                ),
-
-            "duration_min":
-                round(
-                    sum(
-                        (
-                            lap.elapsed_time_sec
-                            or 0
-                        )
-                        for lap
-                        in laps
-                    )
-                    / 60,
-                    1,
-                ),
-
-            "avg_hr":
-                self._avg_hr(
-                    laps
-                ),
-
-            "avg_pace_sec_per_km":
-                self._avg_pace(
-                    laps
-                ),
+            "segment": segment,
+            "laps": len(laps),
+            "distance_km": round(
+                sum(
+                    lap.distance_m or 0
+                    for lap in laps
+                ) / 1000,
+                2,
+            ),
+            "duration_min": round(
+                sum(
+                    lap.elapsed_time_sec or 0
+                    for lap in laps
+                ) / 60,
+                1,
+            ),
+            "avg_hr": self._avg_hr(laps),
+            "avg_pace_sec_per_km": (
+                self._avg_pace(laps)
+            ),
         }
 
         if intensity:
-            result[
-                "intensity"
-            ] = intensity
+            result["intensity"] = intensity
 
         return result
 
@@ -970,41 +928,29 @@ class ExecutedWorkoutStructureAnalyzer:
         self,
         blocks: list[list[LapDB]],
     ) -> dict:
-
         block_durations = []
         block_distances = []
         block_paces = []
         block_hrs = []
 
         for block in blocks:
-
             total_duration_sec = sum(
-                lap.elapsed_time_sec
-                or 0
+                lap.elapsed_time_sec or 0
                 for lap in block
             )
 
             total_distance_m = sum(
-                lap.distance_m
-                or 0
+                lap.distance_m or 0
                 for lap in block
             )
 
-            block_durations.append(
-                total_duration_sec
-            )
-
-            block_distances.append(
-                total_distance_m
-            )
+            block_durations.append(total_duration_sec)
+            block_distances.append(total_distance_m)
 
             if total_distance_m > 0:
                 block_paces.append(
                     total_duration_sec
-                    / (
-                        total_distance_m
-                        / 1000
-                    )
+                    / (total_distance_m / 1000)
                 )
 
             hr_values = [
@@ -1014,64 +960,31 @@ class ExecutedWorkoutStructureAnalyzer:
             ]
 
             if hr_values:
-                block_hrs.append(
-                    mean(
-                        hr_values
-                    )
-                )
+                block_hrs.append(mean(hr_values))
 
         return {
-            "segment":
-                "threshold_blocks",
-
-            "repetitions":
-                len(blocks),
-
-            "avg_duration_sec":
-                round(
-                    mean(
-                        block_durations
-                    ),
-                    1,
-                ),
-
-            "avg_distance_km":
-                round(
-                    mean(
-                        block_distances
-                    )
-                    / 1000,
-                    2,
-                ),
-
-            "avg_pace_sec_per_km":
-                (
-                    round(
-                        mean(
-                            block_paces
-                        ),
-                        1,
-                    )
-                    if block_paces
-                    else None
-                ),
-
-            "avg_hr":
-                (
-                    round(
-                        mean(
-                            block_hrs
-                        ),
-                        1,
-                    )
-                    if block_hrs
-                    else None
-                ),
-
-            "intensity":
-                "threshold",
+            "segment": "threshold_blocks",
+            "repetitions": len(blocks),
+            "avg_duration_sec": round(
+                mean(block_durations),
+                1,
+            ),
+            "avg_distance_km": round(
+                mean(block_distances) / 1000,
+                2,
+            ),
+            "avg_pace_sec_per_km": (
+                round(mean(block_paces), 1)
+                if block_paces
+                else None
+            ),
+            "avg_hr": (
+                round(mean(block_hrs), 1)
+                if block_hrs
+                else None
+            ),
+            "intensity": "threshold",
         }
-
 
     def _build_rep_segment(
         self,
@@ -1080,55 +993,30 @@ class ExecutedWorkoutStructureAnalyzer:
         intensity: str,
         distance_unit: str,
     ) -> dict:
-
         result = {
-            "segment":
-                segment,
-
-            "repetitions":
-                len(laps),
-
-            "avg_duration_sec":
-                self._avg_duration(
-                    laps
-                ),
-
-            "avg_pace_sec_per_km":
-                self._avg_pace(
-                    laps
-                ),
-
-            "avg_hr":
-                self._avg_hr(
-                    laps
-                ),
-
-            "intensity":
-                intensity,
+            "segment": segment,
+            "repetitions": len(laps),
+            "avg_duration_sec": (
+                self._avg_duration(laps)
+            ),
+            "avg_pace_sec_per_km": (
+                self._avg_pace(laps)
+            ),
+            "avg_hr": self._avg_hr(laps),
+            "intensity": intensity,
         }
 
         avg_distance_m = (
-            self._avg_distance_m(
-                laps
-            )
+            self._avg_distance_m(laps)
         )
 
-        if (
-            distance_unit
-            == "km"
-        ):
-            result[
-                "avg_distance_km"
-            ] = round(
-                avg_distance_m
-                / 1000,
+        if distance_unit == "km":
+            result["avg_distance_km"] = round(
+                avg_distance_m / 1000,
                 2,
             )
-
         else:
-            result[
-                "avg_distance_m"
-            ] = round(
+            result["avg_distance_m"] = round(
                 avg_distance_m,
                 1,
             )
@@ -1145,155 +1033,91 @@ class ExecutedWorkoutStructureAnalyzer:
         hill_candidate_laps: list[LapDB],
         fast_finish: dict,
     ) -> dict:
-
         warnings = [
-            (
-                "Classification based only "
-                "on executed lap pattern."
-            ),
+            "Classification based only on executed lap pattern."
         ]
 
         confidence = 0.55
+        classification_method = "lap_pattern"
 
-        classification_method = (
-            "lap_pattern"
-        )
-
-        if (
-            detected_type
-            == "unknown"
-        ):
+        if detected_type == "unknown":
             confidence = 0.2
 
             warnings.append(
-                (
-                    "Workout type could not "
-                    "be classified from laps."
-                )
+                "Workout type could not be classified from laps."
             )
 
-        elif (
-            detected_type
-            == "easy_run"
-        ):
+        elif detected_type == "easy_run":
             confidence = 0.65
 
-        elif (
-            detected_type
-            == "easy_run+strides"
-        ):
+        elif detected_type == "easy_run+strides":
             confidence = 0.75
 
-        elif (
-            detected_type
-            == "tempo_run"
-        ):
+        elif detected_type == "tempo_run":
             confidence = 0.65
 
             if tempo_blocks:
                 confidence = 0.7
 
                 warnings.append(
-                    (
-                        "Tempo block detected "
-                        "from consecutive similar laps."
-                    )
+                    "Tempo block detected from consecutive similar laps."
                 )
 
             if tempo_laps:
                 warnings.append(
-                    (
-                        "Tempo repetitions detected "
-                        "from lap duration and pace."
-                    )
+                    "Tempo repetitions detected from lap duration and pace."
                 )
 
-        elif (
-            detected_type
-            == "threshold"
-        ):
+        elif detected_type == "threshold":
             confidence = 0.6
 
             warnings.append(
-                (
-                    "Threshold classification is "
-                    "estimated from pace and duration."
-                )
+                "Threshold classification is estimated from pace and duration."
             )
 
-        elif (
-            detected_type
-            == "threshold+vo2max"
-        ):
+        elif detected_type == "threshold+vo2max":
             confidence = 0.65
 
             warnings.append(
-                (
-                    "Composite workout classification "
-                    "is estimated from mixed lap patterns."
-                )
+                "Composite workout classification is estimated from mixed lap patterns."
             )
 
-        elif (
-            detected_type
-            == "vo2max"
-        ):
+        elif detected_type == "vo2max":
             confidence = 0.6
 
             warnings.append(
-                (
-                    "VO2max classification is "
-                    "estimated from short fast repetitions."
-                )
+                "VO2max classification is estimated from short fast repetitions."
             )
 
-        elif (
-            detected_type
-            == "hills_candidate"
-        ):
+        elif detected_type == "hills_candidate":
             confidence = 0.45
 
             warnings.append(
-                (
-                    "Hills cannot be confirmed without "
-                    "elevation or planned workout context."
-                )
+                "Hills cannot be confirmed without elevation or planned workout context."
             )
 
         if hill_candidate_laps:
             warnings.append(
-                (
-                    "Hill candidates should be verified "
-                    "with elevation or planned workout data."
-                )
+                "Hill candidates should be verified with elevation or planned workout data."
             )
 
-        if fast_finish.get(
-            "detected"
-        ):
+        if fast_finish.get("detected"):
             warnings.append(
-                (
-                    "Fast finish detected after "
-                    "a substantial easier lead-in."
-                )
+                "Fast finish detected after a substantial easier lead-in."
             )
 
         return {
-            "confidence":
-                confidence,
-
-            "classification_method":
-                classification_method,
-
-            "warnings":
-                warnings,
+            "confidence": confidence,
+            "classification_method": (
+                classification_method
+            ),
+            "warnings": warnings,
         }
 
     def _avg_hr(
         self,
         laps: list[LapDB],
     ):
-
         values = [
             lap.avg_hr
             for lap in laps
@@ -1303,18 +1127,12 @@ class ExecutedWorkoutStructureAnalyzer:
         if not values:
             return None
 
-        return round(
-            mean(
-                values
-            ),
-            1,
-        )
+        return round(mean(values), 1)
 
     def _avg_duration(
         self,
         laps: list[LapDB],
     ):
-
         values = [
             lap.elapsed_time_sec
             for lap in laps
@@ -1324,18 +1142,12 @@ class ExecutedWorkoutStructureAnalyzer:
         if not values:
             return None
 
-        return round(
-            mean(
-                values
-            ),
-            1,
-        )
+        return round(mean(values), 1)
 
     def _avg_distance_m(
         self,
         laps: list[LapDB],
     ):
-
         values = [
             lap.distance_m
             for lap in laps
@@ -1345,23 +1157,15 @@ class ExecutedWorkoutStructureAnalyzer:
         if not values:
             return 0
 
-        return mean(
-            values
-        )
+        return mean(values)
 
     def _avg_pace(
         self,
         laps: list[LapDB],
     ):
-
         values = [
-            (
-                lap.elapsed_time_sec
-                / (
-                    lap.distance_m
-                    / 1000
-                )
-            )
+            lap.elapsed_time_sec
+            / (lap.distance_m / 1000)
             for lap in laps
             if (
                 lap.distance_m
@@ -1372,12 +1176,7 @@ class ExecutedWorkoutStructureAnalyzer:
         if not values:
             return None
 
-        return round(
-            mean(
-                values
-            ),
-            1,
-        )
+        return round(mean(values), 1)
 
     def _detected_type(
         self,
@@ -1391,40 +1190,22 @@ class ExecutedWorkoutStructureAnalyzer:
         stride_laps: list[LapDB],
         fast_finish: dict,
     ) -> str:
-
         if (
-            fast_finish.get(
-                "detected"
-            )
+            fast_finish.get("detected")
             and easy_laps
         ):
             if stride_laps:
-                return (
-                    "easy_run+strides"
-                )
+                return "easy_run+strides"
 
             return "easy_run"
 
-        if (
-            threshold_blocks
-            and vo2max_laps
-        ):
-            return (
-                "threshold+vo2max"
-            )
+        if threshold_blocks and vo2max_laps:
+            return "threshold+vo2max"
 
-        if (
-            threshold_laps
-            and vo2max_laps
-        ):
-            return (
-                "threshold+vo2max"
-            )
+        if threshold_laps and vo2max_laps:
+            return "threshold+vo2max"
 
-        if (
-            tempo_blocks
-            or tempo_laps
-        ):
+        if tempo_blocks or tempo_laps:
             return "tempo_run"
 
         if threshold_blocks:
@@ -1437,17 +1218,10 @@ class ExecutedWorkoutStructureAnalyzer:
             return "vo2max"
 
         if hill_candidate_laps:
-            return (
-                "hills_candidate"
-            )
+            return "hills_candidate"
 
-        if (
-            easy_laps
-            and stride_laps
-        ):
-            return (
-                "easy_run+strides"
-            )
+        if easy_laps and stride_laps:
+            return "easy_run+strides"
 
         if easy_laps:
             return "easy_run"

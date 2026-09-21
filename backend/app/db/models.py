@@ -113,6 +113,8 @@ class LapDB(Base):
 
     elapsed_time_sec = Column(Float)
 
+    moving_time_sec = Column(Float, nullable=True)
+
     avg_hr = Column(Float)
 
     max_hr = Column(Float)
