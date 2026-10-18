@@ -31,3 +31,11 @@ class AdaptationProposal:
     warnings: list[str] = field(default_factory=list)
 
     requires_athlete_approval: bool = True
+
+    AdaptationDecision = Literal[
+        "keep_plan",
+        "reduce_load",
+        "replace_with_easy",
+        "rest",
+        "manual_review",
+    ]

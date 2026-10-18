@@ -27,6 +27,18 @@ document.addEventListener(
     }
 );
 
+function escapeHtml(value) {
+    if (value == null) {
+        return "";
+    }
+
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
 
 async function loadDashboard() {
     ensureAICoachCard();
@@ -94,6 +106,11 @@ async function loadToday() {
 
         renderToday(data);
 
+        await loadAdaptivePlan(
+            data.target_date,
+            data.status
+        );
+
         loadingState.classList.add(
             "hidden"
         );
@@ -116,6 +133,350 @@ async function loadToday() {
             "hidden"
         );
     }
+}
+
+async function loadAdaptivePlan(
+    targetDate,
+    todayStatus
+) {
+    ensureAdaptivePlanCard();
+
+    const card =
+        document.getElementById(
+            "adaptive-plan-card"
+        );
+
+    const content =
+        document.getElementById(
+            "adaptive-plan-content"
+        );
+
+    if (!card || !content) {
+        return;
+    }
+
+    card.classList.add(
+        "hidden"
+    );
+
+    content.innerHTML = "";
+
+    if (
+        todayStatus === "completed"
+        || todayStatus === "no_planned_workout"
+    ) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/adaptive-plan`
+            + `?target_date=${encodeURIComponent(targetDate)}`
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Adaptive plan returned ${response.status}`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        if (
+            data.status !== "ready"
+            || !data.proposal
+        ) {
+            return;
+        }
+
+        renderAdaptivePlan(
+            data.proposal
+        );
+
+    } catch (error) {
+        console.error(
+            "Adaptive planning failed:",
+            error
+        );
+    }
+}
+
+
+function ensureAdaptivePlanCard() {
+    const dashboard =
+        document.getElementById(
+            "dashboard"
+        );
+
+    if (!dashboard) {
+        return;
+    }
+
+    if (
+        document.getElementById(
+            "adaptive-plan-card"
+        )
+    ) {
+        return;
+    }
+
+    const card =
+        document.createElement(
+            "section"
+        );
+
+    card.id =
+        "adaptive-plan-card";
+
+    card.classList.add(
+        "hidden"
+    );
+
+    card.style.marginBottom =
+        "24px";
+
+    card.style.padding =
+        "24px";
+
+    card.style.border =
+        "1px solid rgba(255, 255, 255, 0.08)";
+
+    card.style.borderRadius =
+        "16px";
+
+    card.style.background =
+        "#14171c";
+
+    card.innerHTML = `
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+                margin-bottom: 14px;
+            "
+        >
+            <div>
+                <p
+                    style="
+                        margin: 0 0 6px 0;
+                        font-size: 12px;
+                        font-weight: 700;
+                        letter-spacing: 0.12em;
+                        color: #9ca3af;
+                    "
+                >
+                    ADAPTIVE PLANNING
+                </p>
+
+                <h2
+                    style="
+                        margin: 0;
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: #e5e7eb;
+                    "
+                >
+                    PaceMind sugeruje zmianę
+                </h2>
+            </div>
+
+            <span
+                style="
+                    padding: 5px 9px;
+                    border-radius: 999px;
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 0.06em;
+                    background: rgba(255, 255, 255, 0.06);
+                    color: #9ca3af;
+                "
+            >
+                ADAPT
+            </span>
+        </div>
+
+        <div
+            id="adaptive-plan-content"
+            style="
+                font-size: 15px;
+                line-height: 1.7;
+                color: #e5e7eb;
+            "
+        ></div>
+    `;
+
+    const aiCoachCard =
+        document.getElementById(
+            "ai-coach-card"
+        );
+
+    if (aiCoachCard) {
+        dashboard.insertBefore(
+            card,
+            aiCoachCard
+        );
+    } else {
+        dashboard.prepend(
+            card
+        );
+    }
+}
+
+
+function renderAdaptivePlan(
+    proposal
+) {
+    const card =
+        document.getElementById(
+            "adaptive-plan-card"
+        );
+
+    const content =
+        document.getElementById(
+            "adaptive-plan-content"
+        );
+
+    if (!card || !content) {
+        return;
+    }
+
+    if (
+        proposal.decision
+        === "keep_plan"
+    ) {
+        card.classList.add(
+            "hidden"
+        );
+
+        return;
+    }
+
+    const labels = {
+        reduce_load:
+            "Zmniejsz obciążenie",
+        replace_with_easy:
+            "Zamień na spokojny bieg",
+        rest:
+            "Dzień odpoczynku",
+        manual_review:
+            "Wymaga oceny",
+    };
+
+    const decisionLabel =
+        labels[proposal.decision]
+        || proposal.decision;
+
+    const changes = [];
+
+    if (
+        proposal.proposed_workout_type
+        && proposal.proposed_workout_type
+        !== proposal.original_workout_type
+    ) {
+        changes.push(
+            `Typ: ${formatLabel(
+                proposal.original_workout_type
+            )} → ${formatLabel(
+                proposal.proposed_workout_type
+            )}`
+        );
+    }
+
+    if (
+        proposal.proposed_distance_km
+        != null
+    ) {
+        changes.push(
+            `Dystans: ${
+                proposal.proposed_distance_km
+            } km`
+        );
+    }
+
+    if (
+        proposal.proposed_duration_min
+        != null
+    ) {
+        changes.push(
+            `Czas: ${
+                proposal.proposed_duration_min
+            } min`
+        );
+    }
+
+    content.innerHTML = `
+        <div
+            style="
+                font-weight: 600;
+                margin-bottom: 8px;
+            "
+        >
+            ${escapeHtml(decisionLabel)}
+        </div>
+
+        <div
+            style="
+                color: #d1d5db;
+                margin-bottom: 10px;
+            "
+        >
+            ${escapeHtml(proposal.reason)}
+        </div>
+
+        ${
+            changes.length
+            ? `
+                <div
+                    style="
+                        color: #9ca3af;
+                        margin-bottom: 14px;
+                    "
+                >
+                    ${changes
+                        .map(
+                            item =>
+                                escapeHtml(item)
+                        )
+                        .join("<br>")}
+                </div>
+            `
+            : ""
+        }
+
+        <div
+            id="adaptive-plan-actions"
+            style="
+                display: flex;
+                gap: 10px;
+                margin-top: 16px;
+            "
+        >
+            <button
+                type="button"
+                id="adaptive-plan-accept"
+                disabled
+                title="Obsługa akceptacji zostanie dodana w kolejnym kroku"
+            >
+                Akceptuj
+            </button>
+
+            <button
+                type="button"
+                id="adaptive-plan-reject"
+                disabled
+                title="Obsługa odrzucenia zostanie dodana w kolejnym kroku"
+            >
+                Odrzuć
+            </button>
+        </div>
+    `;
+
+    card.classList.remove(
+        "hidden"
+    );
 }
 
 function ensureAICoachCard() {
