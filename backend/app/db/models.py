@@ -265,3 +265,43 @@ class AIExplanationDB(Base):
         DateTime,
         nullable=False,
     )
+
+class AdaptationDecisionRecordDB(Base):
+    __tablename__ = "adaptation_decision_records"
+
+    id = Column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+
+    target_date = Column(
+        String,
+        nullable=False,
+        index=True,
+    )
+
+    original_workout_type = Column(
+        String,
+        nullable=False,
+    )
+
+    proposed_workout_type = Column(
+        String,
+        nullable=True,
+    )
+
+    proposal_decision = Column(
+        String,
+        nullable=False,
+    )
+
+    athlete_response = Column(
+        String,
+        nullable=False,
+    )
+
+    created_at = Column(
+        DateTime,
+        nullable=False,
+    )

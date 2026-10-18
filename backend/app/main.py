@@ -38,6 +38,7 @@ from app.services.automatic_plan_comparison_service import (
 from app.services.weekly_review_service import WeeklyReviewService
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from app.services.adaptive_planning_service import AdaptivePlanningService
 
 load_dotenv(".env", override=True)
 from app.integrations.intervals_icu_client import (
@@ -93,6 +94,9 @@ from app.services.workout_explanation_service import (
 )
 from app.services.ai_workout_explanation_service import (
     AIWorkoutExplanationService,
+)
+from app.services.adaptation_decision_service import (
+    AdaptationDecisionService,
 )
 
 
@@ -172,6 +176,13 @@ class AthleteMemoryCreatePayload(BaseModel):
         ge=0,
         le=1,
     )
+
+class AdaptationDecisionRequest(BaseModel):
+    target_date: str
+    original_workout_type: str
+    proposed_workout_type: str | None = None
+    proposal_decision: str
+    athlete_response: str
 
 
 class AthleteMemoryUpdatePayload(BaseModel):
@@ -1703,4 +1714,108 @@ def explain_workout_ai(
     return {
         "session_id": session_id,
         "explanation": explanation,
+    }
+
+@app.get("/adaptive-plan")
+def get_adaptive_plan(
+    target_date: str,
+):
+    proposal = (
+        AdaptivePlanningService()
+        .build(target_date)
+    )
+
+    if proposal is None:
+        return {
+            "target_date": target_date,
+            "status": "no_planned_workout",
+            "proposal": None,
+        }
+
+    return {
+        "target_date": target_date,
+        "status": "ready",
+        "proposal": {
+            "target_date": (
+                proposal.target_date.isoformat()
+            ),
+            "original_workout_title": (
+                proposal.original_workout_title
+            ),
+            "original_workout_type": (
+                proposal.original_workout_type
+            ),
+            "decision": proposal.decision,
+            "proposed_workout_type": (
+                proposal.proposed_workout_type
+            ),
+            "proposed_distance_km": (
+                proposal.proposed_distance_km
+            ),
+            "proposed_duration_min": (
+                proposal.proposed_duration_min
+            ),
+            "reason": proposal.reason,
+            "evidence": proposal.evidence,
+            "warnings": proposal.warnings,
+            "requires_athlete_approval": (
+                proposal.requires_athlete_approval
+            ),
+        },
+    }
+
+@app.post("/adaptive-plan/decision")
+def save_adaptive_plan_decision(
+    payload: AdaptationDecisionRequest,
+):
+    allowed_responses = {
+        "accepted",
+        "rejected",
+    }
+
+    if payload.athlete_response not in allowed_responses:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "athlete_response must be one of: "
+                "accepted, rejected"
+            ),
+        )
+
+    result = (
+        AdaptationDecisionService()
+        .save(
+            target_date=payload.target_date,
+            original_workout_type=(
+                payload.original_workout_type
+            ),
+            proposed_workout_type=(
+                payload.proposed_workout_type
+            ),
+            proposal_decision=(
+                payload.proposal_decision
+            ),
+            athlete_response=(
+                payload.athlete_response
+            ),
+        )
+    )
+
+    return {
+        "target_date": result.target_date,
+        "original_workout_type": (
+            result.original_workout_type
+        ),
+        "proposed_workout_type": (
+            result.proposed_workout_type
+        ),
+        "proposal_decision": (
+            result.proposal_decision
+        ),
+        "athlete_response": (
+            result.athlete_response
+        ),
+        "created_at": (
+            result.created_at.isoformat()
+        ),
     }
