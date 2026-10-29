@@ -1,0 +1,10 @@
+{
+  "name": "pacemind-frontend-tests",
+  "private": true,
+  "scripts": {
+    "test": "node --test adaptive-plan.test.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

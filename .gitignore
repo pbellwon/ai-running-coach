@@ -16,3 +16,5 @@ backend/credentials/
 .vscode/
 
 .firebase/
+
+node_modules/

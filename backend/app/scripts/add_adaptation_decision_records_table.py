@@ -1,51 +1,32 @@
-from __future__ import annotations
+"""Create or upgrade the decision table without changing historical records."""
 
 from sqlalchemy import inspect, text
 
 from app.db.database import engine
+from app.db.models import AdaptationDecisionRecordDB
 
 
-TABLE_NAME = "adaptation_decision_records"
+def upgrade(db_engine) -> None:
+    table = AdaptationDecisionRecordDB.__table__
+    table.create(bind=db_engine, checkfirst=True)
+
+    columns = {column["name"] for column in inspect(db_engine).get_columns(table.name)}
+    with db_engine.begin() as connection:
+        if "proposal_id" not in columns:
+            connection.execute(text(
+                "ALTER TABLE adaptation_decision_records "
+                "ADD COLUMN proposal_id VARCHAR(64) NULL"
+            ))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS "
+            "ix_adaptation_decision_records_proposal_id "
+            "ON adaptation_decision_records (proposal_id)"
+        ))
 
 
 def main() -> None:
-    inspector = inspect(engine)
-
-    if TABLE_NAME in inspector.get_table_names():
-        print(
-            f"Table {TABLE_NAME} already exists."
-        )
-        return
-
-    statement = """
-    CREATE TABLE adaptation_decision_records (
-        id SERIAL PRIMARY KEY,
-        target_date VARCHAR NOT NULL,
-        original_workout_type VARCHAR NOT NULL,
-        proposed_workout_type VARCHAR NULL,
-        proposal_decision VARCHAR NOT NULL,
-        athlete_response VARCHAR NOT NULL,
-        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL
-    )
-    """
-
-    index_statement = """
-    CREATE INDEX ix_adaptation_decision_records_target_date
-    ON adaptation_decision_records (target_date)
-    """
-
-    with engine.begin() as connection:
-        connection.execute(
-            text(statement)
-        )
-
-        connection.execute(
-            text(index_statement)
-        )
-
-    print(
-        f"Created table {TABLE_NAME}."
-    )
+    upgrade(engine)
+    print("Adaptation decision table is up to date.")
 
 
 if __name__ == "__main__":

@@ -183,6 +183,7 @@ class AdaptationDecisionRequest(BaseModel):
     proposed_workout_type: str | None = None
     proposal_decision: str
     athlete_response: str
+    proposal_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class AthleteMemoryUpdatePayload(BaseModel):
@@ -1730,12 +1731,17 @@ def get_adaptive_plan(
             "target_date": target_date,
             "status": "no_planned_workout",
             "proposal": None,
+            "athlete_decision": None,
         }
+
+    saved_decision = AdaptationDecisionService().get_for_proposal(proposal.proposal_id)
 
     return {
         "target_date": target_date,
         "status": "ready",
+        "athlete_decision": asdict(saved_decision) if saved_decision else None,
         "proposal": {
+            "proposal_id": proposal.proposal_id,
             "target_date": (
                 proposal.target_date.isoformat()
             ),
@@ -1782,6 +1788,25 @@ def save_adaptive_plan_decision(
             ),
         )
 
+    if payload.proposal_id is not None:
+        proposal = AdaptivePlanningService().build(payload.target_date)
+        if (
+            proposal is None
+            or proposal.proposal_id != payload.proposal_id
+            or proposal.original_workout_type != payload.original_workout_type
+            or proposal.proposed_workout_type != payload.proposed_workout_type
+            or proposal.decision != payload.proposal_decision
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Propozycja zmieniła się. Odśwież dane i oceń aktualny trening.",
+            )
+        if proposal.decision == "keep_plan" or not proposal.requires_athlete_approval:
+            raise HTTPException(
+                status_code=400,
+                detail="Ta propozycja nie wymaga decyzji zawodnika.",
+            )
+
     result = (
         AdaptationDecisionService()
         .save(
@@ -1798,10 +1823,12 @@ def save_adaptive_plan_decision(
             athlete_response=(
                 payload.athlete_response
             ),
+            proposal_id=payload.proposal_id,
         )
     )
 
     return {
+        "proposal_id": result.proposal_id,
         "target_date": result.target_date,
         "original_workout_type": (
             result.original_workout_type
