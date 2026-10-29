@@ -269,6 +269,10 @@ class AIExplanationDB(Base):
 class AdaptationDecisionRecordDB(Base):
     __tablename__ = "adaptation_decision_records"
 
+    # NULL keeps historical decisions readable without assigning them to a
+    # potentially different proposal. New proposals can be answered only once.
+    proposal_id = Column(String(64), nullable=True, unique=True, index=True)
+
     id = Column(
         Integer,
         primary_key=True,

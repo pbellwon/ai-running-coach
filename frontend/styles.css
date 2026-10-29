@@ -37,6 +37,38 @@ select {
     font: inherit;
 }
 
+.adaptive-plan-button {
+    padding: 10px 16px;
+    border: 1px solid #596579;
+    border-radius: 8px;
+    background: #202832;
+    color: #f3f4f6;
+    cursor: pointer;
+}
+
+.adaptive-plan-button:hover:not(:disabled) {
+    background: #303c4c;
+}
+
+.adaptive-plan-button:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 3px;
+}
+
+.adaptive-plan-button:disabled {
+    opacity: 0.55;
+    cursor: default;
+}
+
+.adaptive-plan-saved {
+    color: #86efac;
+}
+
+.adaptive-plan-error,
+.adaptive-plan-warning {
+    color: #fca5a5;
+}
+
 .app-shell {
     width: min(100%, 920px);
     margin: 0 auto;

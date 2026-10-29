@@ -20,3 +20,4 @@ class AdaptationDecisionRecord:
     athlete_response: AdaptationResponse
 
     created_at: datetime
+    proposal_id: str | None = None

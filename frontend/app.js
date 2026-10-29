@@ -171,7 +171,8 @@ async function loadAdaptivePlan(
     try {
         const response = await fetch(
             `${API_BASE_URL}/adaptive-plan`
-            + `?target_date=${encodeURIComponent(targetDate)}`
+            + `?target_date=${encodeURIComponent(targetDate)}`,
+            { cache: "no-store" }
         );
 
         if (!response.ok) {
@@ -191,7 +192,8 @@ async function loadAdaptivePlan(
         }
 
         renderAdaptivePlan(
-            data.proposal
+            data.proposal,
+            data.athlete_decision
         );
 
     } catch (error) {
@@ -199,6 +201,9 @@ async function loadAdaptivePlan(
             "Adaptive planning failed:",
             error
         );
+        content.textContent =
+            "Nie udało się wczytać propozycji i zapisanej decyzji. Odśwież dane, aby spróbować ponownie.";
+        card.classList.remove("hidden");
     }
 }
 
@@ -327,7 +332,8 @@ function ensureAdaptivePlanCard() {
 
 
 function renderAdaptivePlan(
-    proposal
+    proposal,
+    savedDecision = null
 ) {
     const card =
         document.getElementById(
@@ -446,6 +452,16 @@ function renderAdaptivePlan(
             : ""
         }
 
+        ${(proposal.warnings || []).map(warning => `
+            <p class="adaptive-plan-warning">${escapeHtml(warning)}</p>
+        `).join("")}
+
+        <p class="muted">
+            Akceptacja zapisuje Twoją decyzję. Zmianę w planie treningowym wprowadź ręcznie.
+        </p>
+
+        <p id="adaptive-plan-status" role="status" aria-live="polite"></p>
+
         <div
             id="adaptive-plan-actions"
             style="
@@ -457,8 +473,7 @@ function renderAdaptivePlan(
             <button
                 type="button"
                 id="adaptive-plan-accept"
-                disabled
-                title="Obsługa akceptacji zostanie dodana w kolejnym kroku"
+                class="adaptive-plan-button"
             >
                 Akceptuj
             </button>
@@ -466,8 +481,7 @@ function renderAdaptivePlan(
             <button
                 type="button"
                 id="adaptive-plan-reject"
-                disabled
-                title="Obsługa odrzucenia zostanie dodana w kolejnym kroku"
+                class="adaptive-plan-button"
             >
                 Odrzuć
             </button>
@@ -477,6 +491,101 @@ function renderAdaptivePlan(
     card.classList.remove(
         "hidden"
     );
+
+    bindAdaptivePlanActions(proposal, savedDecision);
+}
+
+function bindAdaptivePlanActions(proposal, savedDecision) {
+    const accept = document.getElementById("adaptive-plan-accept");
+    const reject = document.getElementById("adaptive-plan-reject");
+    const status = document.getElementById("adaptive-plan-status");
+    const actions = document.getElementById("adaptive-plan-actions");
+    let pending = false;
+
+    function showDecision(record) {
+        accept.disabled = true;
+        reject.disabled = true;
+        status.className = "adaptive-plan-saved";
+        status.textContent = record.athlete_response === "accepted"
+            ? "Zaakceptowano propozycję. Decyzja została zapisana."
+            : "Odrzucono propozycję. Decyzja została zapisana.";
+    }
+
+    if (savedDecision?.proposal_id === proposal.proposal_id
+        && ["accepted", "rejected"].includes(savedDecision?.athlete_response)) {
+        showDecision(savedDecision);
+        return;
+    }
+
+    if (proposal.requires_athlete_approval === false) {
+        actions.classList.add("hidden");
+        status.textContent = "Ta propozycja nie wymaga decyzji zawodnika.";
+        return;
+    }
+
+    if (!proposal.proposal_id) {
+        accept.disabled = true;
+        reject.disabled = true;
+        status.textContent = "Zapis decyzji jest obecnie niedostępny. Odśwież dane później.";
+        return;
+    }
+
+    async function saveDecision(athleteResponse) {
+        if (pending || accept.disabled || reject.disabled) {
+            return;
+        }
+        pending = true;
+        accept.disabled = true;
+        reject.disabled = true;
+        actions.setAttribute("aria-busy", "true");
+        status.className = "";
+        status.textContent = "Zapisywanie decyzji…";
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/adaptive-plan/decision`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    proposal_id: proposal.proposal_id,
+                    target_date: proposal.target_date,
+                    original_workout_type: proposal.original_workout_type,
+                    proposed_workout_type: proposal.proposed_workout_type,
+                    proposal_decision: proposal.decision,
+                    athlete_response: athleteResponse,
+                }),
+            });
+            if (response.status === 409) {
+                status.className = "adaptive-plan-error";
+                status.textContent = "Propozycja zmieniła się. Odśwież dane i oceń aktualny trening.";
+                return;
+            }
+            if (!response.ok) {
+                throw new Error(`Decision returned ${response.status}`);
+            }
+            const record = await response.json();
+            if (record.proposal_id !== proposal.proposal_id
+                || !["accepted", "rejected"].includes(record.athlete_response)) {
+                throw new Error("Invalid saved decision");
+            }
+            if (status.isConnected) {
+                showDecision(record);
+            }
+        } catch (error) {
+            console.error("Could not save adaptive decision:", error);
+            if (status.isConnected) {
+                status.className = "adaptive-plan-error";
+                status.textContent = "Nie udało się potwierdzić zapisu decyzji. Spróbuj ponownie lub odśwież dane.";
+                accept.disabled = false;
+                reject.disabled = false;
+            }
+        } finally {
+            pending = false;
+            actions.removeAttribute("aria-busy");
+        }
+    }
+
+    accept.addEventListener("click", () => saveDecision("accepted"));
+    reject.addEventListener("click", () => saveDecision("rejected"));
 }
 
 function ensureAICoachCard() {

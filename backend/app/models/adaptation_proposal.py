@@ -1,6 +1,8 @@
 
 from dataclasses import dataclass, field
 from datetime import date
+import hashlib
+import json
 from typing import Literal
 
 
@@ -8,6 +10,7 @@ AdaptationDecision = Literal[
     "keep_plan",
     "reduce_load",
     "replace_with_easy",
+    "rest",
     "manual_review",
 ]
 
@@ -32,10 +35,22 @@ class AdaptationProposal:
 
     requires_athlete_approval: bool = True
 
-    AdaptationDecision = Literal[
-        "keep_plan",
-        "reduce_load",
-        "replace_with_easy",
-        "rest",
-        "manual_review",
-    ]
+    @property
+    def proposal_id(self) -> str:
+        """Identify the actionable proposal independently of explanatory text."""
+        payload = {
+            "target_date": self.target_date.isoformat(),
+            "original_workout_title": self.original_workout_title,
+            "original_workout_type": self.original_workout_type,
+            "decision": self.decision,
+            "proposed_workout_type": self.proposed_workout_type,
+            "proposed_distance_km": (
+                float(self.proposed_distance_km)
+                if self.proposed_distance_km is not None else None
+            ),
+            "proposed_duration_min": self.proposed_duration_min,
+            "requires_athlete_approval": self.requires_athlete_approval,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()
