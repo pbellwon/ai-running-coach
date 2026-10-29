@@ -62,11 +62,7 @@ class RecentExecutionReviewService:
     ):
         self.session_factory = session_factory
 
-        self.plan_source = (
-            plan_source
-            if plan_source is not None
-            else GoogleSheetsPlanSource()
-        )
+        self.plan_source = plan_source
 
         self.plan_importer = (
             plan_importer
@@ -167,6 +163,10 @@ class RecentExecutionReviewService:
             planned_workouts=planned_workouts,
         )
 
+        return self.review_session(session, planned_workout)
+
+    def review_session(self, session: ExecutedSession, planned_workout) -> dict:
+        """Review an already matched session without fetching or rematching plans."""
         feedback = self.feedback_service.get(
             session_id=session.session_id
         )
@@ -542,7 +542,8 @@ class RecentExecutionReviewService:
         range_end: date,
     ) -> list:
         rows = (
-            self.plan_source.fetch_rows()
+            (self.plan_source if self.plan_source is not None else GoogleSheetsPlanSource())
+            .fetch_rows()
         )
 
         workouts = (

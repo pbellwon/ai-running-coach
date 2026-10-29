@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=5"
+        href="styles.css?v=6"
     >
 </head>
 
@@ -288,6 +288,22 @@
                 </div>
             </section>
 
+            <section id="weekly-coach-review-card" class="card weekly-review-card" aria-labelledby="weekly-review-title">
+                <p class="section-label">WEEKLY COACH REVIEW</p>
+                <h2 id="weekly-review-title">Tygodniowy przegląd trenera</h2>
+                <p class="muted">Plan, wykonanie i regeneracja — wnioski na kolejny tydzień.</p>
+                <nav class="weekly-review-navigation" aria-label="Wybór tygodnia">
+                    <button id="weekly-review-previous" type="button">← Poprzedni</button>
+                    <button id="weekly-review-next" type="button">Następny →</button>
+                    <button id="weekly-review-current" type="button">Bieżący tydzień</button>
+                    <button id="weekly-review-latest" type="button">Ostatni pełny tydzień</button>
+                </nav>
+                <p id="weekly-review-period" class="muted"></p>
+                <p id="weekly-review-state" role="status" aria-live="polite">Wczytywanie przeglądu…</p>
+                <button id="weekly-review-retry" type="button" class="hidden">Spróbuj ponownie</button>
+                <div id="weekly-review-content"></div>
+            </section>
+
             <section class="card compact-card">
                 <p class="section-label">
                     TRAINING CONTEXT
@@ -456,6 +472,7 @@
         </div>
     </main>
 
-    <script src="app.js?v=5"></script>
+    <script src="weekly-review.js?v=1"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>

@@ -47,6 +47,7 @@ async function loadDashboard() {
         loadToday(),
         loadTrainingOverview(),
         loadRecentWorkouts(),
+        loadWeeklyCoachReview(),
     ]);
 }
 

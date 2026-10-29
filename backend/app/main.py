@@ -36,6 +36,7 @@ from app.services.automatic_plan_comparison_service import (
     AutomaticPlanComparisonService,
 )
 from app.services.weekly_review_service import WeeklyReviewService
+from app.services.weekly_coach_review_service import WeeklyCoachReviewService
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from app.services.adaptive_planning_service import AdaptivePlanningService
@@ -815,6 +816,25 @@ def weekly_review_test(
     return WeeklyReviewService().review(
         week_start=week_start,
     )
+
+
+@app.get("/review/week")
+def weekly_coach_review(week_start: date | None = None):
+    # Validate user input separately from downstream integration failures.
+    today = date.today()
+    current_monday = today - timedelta(days=today.weekday())
+    if week_start is not None:
+        if week_start.weekday() != 0:
+            raise HTTPException(status_code=400, detail="week_start must be a Monday.")
+        if week_start > current_monday:
+            raise HTTPException(status_code=400, detail="A future week cannot be reviewed yet.")
+    try:
+        return WeeklyCoachReviewService().build(week_start)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Weekly coach review is currently unavailable. Please try again later.",
+        ) from exc
 
 @app.get("/intervals/connection-test")
 def intervals_connection_test():
