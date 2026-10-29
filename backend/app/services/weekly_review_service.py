@@ -19,6 +19,7 @@ from app.services.training_distribution_analyzer import (
 from app.services.workout_type_matcher import (
     WorkoutTypeMatcher,
 )
+from app.services.recent_execution_review_service import RecentExecutionReviewService
 
 
 class WeeklyReviewService:
@@ -41,9 +42,26 @@ class WeeklyReviewService:
     - executed training distribution
     """
 
+    def __init__(
+        self,
+        session_factory=SessionLocal,
+        plan_source=None,
+        plan_importer=None,
+        session_builder=None,
+        execution_review_service=None,
+    ):
+        self.session_factory = session_factory
+        self.plan_source = plan_source
+        self.plan_importer = plan_importer
+        self.session_builder = session_builder
+        self.execution_review_service = execution_review_service
+
     def review(
         self,
         week_start: date | datetime | str,
+        *,
+        include_execution_reviews: bool = False,
+        as_of_date: date | None = None,
     ) -> dict:
         normalized_week_start = self._normalize_date(
             week_start
@@ -71,15 +89,21 @@ class WeeklyReviewService:
         executed_workouts = (
             self._get_executed_workouts(
                 week_start=normalized_week_start,
-                week_end=week_end,
+                week_end=min(week_end, as_of_date) if as_of_date else week_end,
             )
         )
 
         executed_sessions = (
-            CompositeSessionBuilder().build(
+            (self.session_builder or CompositeSessionBuilder()).build(
                 executed_workouts
             )
         )
+
+        reviewer = None
+        if include_execution_reviews:
+            reviewer = self.execution_review_service or RecentExecutionReviewService(
+                session_factory=self.session_factory,
+            )
 
         planned_by_date: dict[
             date,
@@ -210,9 +234,8 @@ class WeeklyReviewService:
                 if not match.type_match
             )
 
-            day_missed_count = len(
-                unmatched_planned
-            )
+            day_is_open = as_of_date is not None and current_date >= as_of_date
+            day_missed_count = 0 if day_is_open else len(unmatched_planned)
 
             day_unplanned_count = len(
                 unmatched_sessions
@@ -271,7 +294,7 @@ class WeeklyReviewService:
                     )
 
                     if match is None:
-                        match_status = "missed"
+                        match_status = "pending" if day_is_open else "missed"
                         matched_executed_type = None
                         matched_session_id = None
                         type_match = False
@@ -421,6 +444,14 @@ class WeeklyReviewService:
                     )
                 )
 
+                if reviewer is not None:
+                    executed_session_entries[-1]["execution_review"] = (
+                        reviewer.review_session(
+                            session=executed_session,
+                            planned_workout=match.planned_workout if match else None,
+                        )["review"]
+                    )
+
             day_status = (
                 self._determine_day_status(
                     training_plans_count=len(
@@ -449,6 +480,11 @@ class WeeklyReviewService:
                     ),
                 )
             )
+
+            if day_is_open and unmatched_planned:
+                day_status = "partially_executed" if day_sessions else "pending"
+            elif day_is_open and off_plans and not day_sessions:
+                day_status = "pending"
 
             days.append(
                 {
@@ -503,8 +539,12 @@ class WeeklyReviewService:
         )
 
         planned_distance_complete = (
-            planned_distance_entries_count
-            == planned_training_count
+            planned_training_count > 0
+            and all(
+                workout.planned_distance_km is not None
+                for workout in planned_workouts
+                if workout.workout_type != "off"
+            )
         )
 
         distance_difference_km = (
@@ -570,6 +610,10 @@ class WeeklyReviewService:
                 ),
                 "missed_workouts_count": (
                     missed_count
+                ),
+                "pending_workouts_count": sum(
+                    entry["match_status"] == "pending"
+                    for day in days for entry in day["planned_workouts"]
                 ),
                 "unplanned_workouts_count": (
                     unplanned_count
@@ -761,12 +805,12 @@ class WeeklyReviewService:
         week_end: date,
     ) -> list:
         rows = (
-            GoogleSheetsPlanSource()
+            (self.plan_source if self.plan_source is not None else GoogleSheetsPlanSource())
             .fetch_rows()
         )
 
         workouts = (
-            ExistingPlanImporter()
+            (self.plan_importer or ExistingPlanImporter())
             .import_rows(rows)
         )
 
@@ -795,7 +839,7 @@ class WeeklyReviewService:
             datetime.min.time(),
         )
 
-        db = SessionLocal()
+        db = self.session_factory()
 
         try:
             return (

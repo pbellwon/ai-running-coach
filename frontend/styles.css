@@ -789,3 +789,110 @@ h3 {
         width: 100%;
     }
 }
+
+.weekly-review-card {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.weekly-review-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.weekly-review-card button {
+    border: 1px solid #596579;
+    border-radius: 8px;
+    background: #202832;
+    color: #f3f4f6;
+    padding: 9px 12px;
+    cursor: pointer;
+}
+
+.weekly-review-card button:hover:not(:disabled) {
+    background: #303c4c;
+}
+
+.weekly-review-card button:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.weekly-review-card :is(button, summary):focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 3px;
+}
+
+.weekly-review-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    margin: 20px 0;
+}
+
+.weekly-review-metrics dt {
+    font-size: 13px;
+    color: #9ca3af;
+}
+
+.weekly-review-metrics dd {
+    margin: 5px 0 0;
+    font-size: 19px;
+    font-weight: 600;
+}
+
+.weekly-review-card h4 {
+    margin: 22px 0 10px;
+}
+
+.weekly-review-card li {
+    margin-bottom: 8px;
+}
+
+.weekly-review-card summary {
+    cursor: pointer;
+    color: #b8d6ff;
+    margin: 10px 0;
+}
+
+.weekly-review-findings details,
+.weekly-review-limitations {
+    color: #b4bdca;
+    font-size: 14px;
+}
+
+.weekly-review-notice {
+    padding: 12px;
+    border-left: 3px solid #eab308;
+    background: #242116;
+}
+
+.weekly-review-table-scroll {
+    overflow-x: auto;
+}
+
+.weekly-review-days table {
+    width: 100%;
+    min-width: 600px;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.weekly-review-days :is(th, td) {
+    text-align: left;
+    vertical-align: top;
+    padding: 12px 8px;
+    border-bottom: 1px solid #384252;
+}
+
+.weekly-review-days ul {
+    padding-left: 18px;
+}
+
+.weekly-review-days caption {
+    text-align: left;
+    color: #9ca3af;
+    padding: 10px 0;
+}
