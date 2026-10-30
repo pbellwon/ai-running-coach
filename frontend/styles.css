@@ -896,3 +896,14 @@ h3 {
     color: #9ca3af;
     padding: 10px 0;
 }
+
+.weekly-review-story > section {
+    padding: 16px;
+    margin: 14px 0;
+    border: 1px solid #dbe3eb;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.weekly-review-story h4 { margin-top: 0; }
+.weekly-review-goal-target { font-weight: 600; }
+.weekly-review-statistics { margin: 20px 0; }

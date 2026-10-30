@@ -3,7 +3,7 @@ from collections import Counter
 
 
 class WeeklyCoachReviewEngine:
-    def review(self, weekly: dict, recovery: dict) -> dict:
+    def review(self, weekly: dict, recovery: dict, goal=None) -> dict:
         summary = weekly["summary"]
         sessions = [session for day in weekly["days"] for session in day["executed_sessions"]]
         reviews = [session["execution_review"] for session in sessions]
@@ -109,11 +109,15 @@ class WeeklyCoachReviewEngine:
             "verdict": verdict,
             "headline": headline,
             "summary": (
-                f"Zapisano {len(sessions)} logicznych sesji; do planu dopasowano "
-                f"{summary['paired_workouts_count']} z {summary['planned_training_count']} jednostek. "
-                f"Oceny wykonania: on_target {counts['on_target']}, too_hard {counts['too_hard']}, "
-                f"too_easy {counts['too_easy']}."
+                "Ten tydzień dostarczył bodźców treningowych, ale sygnały przeciążenia wymagają ostrożności: daj organizmowi czas na ich przyswojenie."
+                if verdict == "caution" else
+                "Nie wszystkie elementy tygodnia da się jeszcze ocenić. Sprawdź poniżej, co wspierało przygotowania i co wymaga uwagi."
+                if verdict == "review" else
+                "Wykonane zgodnie z planem sesje wspierały ciągłość przygotowań. To dowód realizacji bodźca, a nie jeszcze potwierdzenie poprawy formy."
+                if verdict == "on_track" else
+                "Brakuje wiarygodnych ocen wykonania, aby powiedzieć, jak organizm odpowiedział na ten tydzień. Sam zapis aktywności nie wystarcza."
             ),
+            **self._training_story(sessions, recovery, goal, hard),
             "execution_assessments": {
                 key: counts[key] for key in ("on_target", "too_hard", "too_easy", "insufficient_evidence")
             },
@@ -123,3 +127,56 @@ class WeeklyCoachReviewEngine:
             "next_steps": next_steps,
             "limitations": limitations,
         }
+
+    def _training_story(self, sessions, recovery, goal, hard):
+        benefits = []
+        # Only well-supported, on-plan sessions justify a positive stimulus claim.
+        supported = [s for s in sessions if s["execution_review"]["status"] == "on_target"
+                     and s["execution_review"]["confidence"] >= 0.5]
+        groups = [
+            ({"easy_run", "recovery_run", "easy_run+strides", "easy_run+hills"}, "aerobic",
+             "Spokojne biegi wspierały bazę tlenową i ciągłość treningu — fundament utrzymania tempa na 10 km."),
+            ({"threshold", "tempo", "tempo_run"}, "threshold",
+             "Praca progowa i tempowa dostarczyła bodźca do dłuższego utrzymywania mocnego wysiłku — ważnego na 10 km."),
+            ({"intervals", "vo2max"}, "speed_endurance",
+             "Interwały dostarczyły bodźca do pracy przy wysokiej intensywności, wspierającego przygotowanie do szybkiego biegu na 10 km."),
+            ({"long_run"}, "endurance",
+             "Dłuższy bieg wspierał wytrzymałość potrzebną do utrzymania wysiłku także w końcówce dystansu."),
+            ({"strength"}, "strength",
+             "Trening siłowy wniósł pracę uzupełniającą przygotowania biegowe; sam zapis nie potwierdza jeszcze poprawy ekonomii biegu."),
+        ]
+        for types, code, text in groups:
+            matched = [s for s in supported if s.get("workout_type") in types]
+            if matched:
+                benefits.append({"code": code, "text": text, "evidence": [
+                    f"Sesje zgodne z planem, z pewnością oceny co najmniej 0,5: {len(matched)}.",
+                    *[f"{s.get('workout_type')}: {s.get('total_distance_km')} km / {s.get('total_duration_min')} min." for s in matched],
+                ]})
+        fatigue = recovery["fatigue_signal"]
+        if hard >= 2 or fatigue in {"accumulating", "high"}:
+            load = "Są sygnały, że obciążenie mogło być zbyt duże. Nie dokładaj intensywności, zanim ponownie ocenisz regenerację. To ostrzeżenie treningowe, nie diagnoza przetrenowania."
+        elif hard or fatigue == "watch":
+            load = "Pojawił się sygnał ostrzegawczy. Obserwuj odczucia i regenerację przed kolejnym akcentem; pojedyncza trudniejsza sesja nie przesądza o narastającym zmęczeniu."
+        elif fatigue == "insufficient_data" or not supported:
+            load = "Nie ma wystarczających danych, by wykluczyć zbyt duże obciążenie. Uzupełnij pomiary regeneracji i odczucia po treningach."
+        else:
+            load = "W dostępnych ocenach nie widać powtarzającego się nadmiernego bodźca ani narastającego sygnału zmęczenia. Nadal obserwuj odczucia — brak ostrzeżenia nie gwarantuje pełnej regeneracji."
+        goal_context = None
+        if goal and goal.distance_km and goal.target_time_sec:
+            minutes, seconds = divmod(goal.target_time_sec, 60)
+            pace = round(goal.target_time_sec / goal.distance_km)
+            pace_min, pace_sec = divmod(pace, 60)
+            goal_context = {
+                "label": f"{goal.distance_km:g} km w {minutes}:{seconds:02d}",
+                "target_date": goal.target_date.isoformat() if goal.target_date else None,
+                "target_pace": f"{pace_min}:{pace_sec:02d}/km",
+                "summary": (
+                    "Tydzień wniósł pracę wspierającą wymagania celu. Teraz kluczowe jest przyswojenie bodźca; sygnały zmęczenia przemawiają za ochroną regeneracji, a nie przyspieszaniem kolejnych sesji."
+                    if benefits and (hard or fatigue in {"watch", "accumulating", "high"}) else
+                    "Tydzień wspierał przygotowania przez bodźce opisane powyżej. Ich regularna realizacja i regeneracja tworzą warunki do postępu."
+                    if benefits else
+                    "Nie ma dość wiarygodnych wykonań, aby powiązać ten tydzień z postępem w kierunku celu. Sprawdź zapisy i oceny sesji."
+                ),
+                "limitation": "To interpretacja bodźców, nie prognoza wyniku. Jeden tydzień nie potwierdza gotowości startowej ani tego, o ile poprawił się czas na 10 km.",
+            }
+        return {"training_benefits": benefits, "load_interpretation": load, "goal_context": goal_context}

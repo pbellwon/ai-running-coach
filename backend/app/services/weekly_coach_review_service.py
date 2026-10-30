@@ -6,14 +6,16 @@ from app.engine.weekly_coach_review_engine import WeeklyCoachReviewEngine
 from app.services.recovery_snapshot_service import RecoverySnapshotService
 from app.services.recovery_trend_service import RecoveryTrendService
 from app.services.weekly_review_service import WeeklyReviewService
+from app.services.current_goal_service import CurrentGoalService
 
 
 class WeeklyCoachReviewService:
-    def __init__(self, weekly_service=None, snapshot_service=None, coach_engine=None, today=None):
+    def __init__(self, weekly_service=None, snapshot_service=None, coach_engine=None, today=None, goal_service=None):
         self.weekly_service = weekly_service or WeeklyReviewService()
         self.snapshot_service = snapshot_service or RecoverySnapshotService()
         self.coach_engine = coach_engine or WeeklyCoachReviewEngine()
         self.today = today or date.today
+        self.goal_service = goal_service or CurrentGoalService()
 
     def build(self, week_start: date | str | None = None) -> dict:
         today = self.today()
@@ -41,7 +43,7 @@ class WeeklyCoachReviewService:
         )
         recovery = self._recovery(start, as_of)
         sessions_count = weekly["summary"]["executed_sessions_count"]
-        coach = self.coach_engine.review(weekly, recovery)
+        coach = self.coach_engine.review(weekly, recovery, goal=self.goal_service.get())
         return {
             "week_start": start.isoformat(),
             "week_end": end.isoformat(),
