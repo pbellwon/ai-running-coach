@@ -117,3 +117,14 @@ finding evidence, navigate to the current week, and confirm pending workouts are
 not called missed. Check a week with no records too. Production behavior and
 external Google Sheets access must be validated after deployment; local fixture
 tests alone do not establish those integration results.
+
+## Korekta interpretacji tygodnia
+
+Karta pokazuje najpierw znaczenie wykonanej pracy, sygnały nadmiernego obciążenia,
+związek z aktualnym celem i wskazówki na kolejny tydzień. Statystyki i szczegóły
+regeneracji są zwijane. API rozszerza `coach` o `training_benefits`,
+`load_interpretation` i `goal_context`. Cel pochodzi z CurrentGoalService, bez
+nowych wywołań AI. Typy sesji ocenionych jako on_target z pewnością >= 0,5
+uzasadniają opis oczekiwanego bodźca; nie stanowią pomiaru adaptacji ani prognozy.
+Niewystarczające dane nie są przedstawiane jako brak przeciążenia.
+Roadmapa kolejnych sprintów: [roadmap.md](roadmap.md).

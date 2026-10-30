@@ -153,6 +153,11 @@ test('weekly review shows coaching, recovery, evidence and a full seven-day comp
     const page = await openDashboard(t);
     await waitForWeekly(page);
     const content = page.locator('#weekly-review-content');
+    await content.getByRole('heading', { name: 'Co dał ten tydzień treningów?' }).waitFor();
+    assert.match(await content.locator('.weekly-review-goal').textContent(), /10 km w 38:30/);
+    assert.match(await content.locator('.weekly-review-goal').textContent(), /nie prognoza wyniku/);
+    assert.match(await content.locator('.weekly-review-load').textContent(), /obciążenie mogło być zbyt duże/);
+    assert.equal(await content.locator('.weekly-review-statistics').getAttribute('open'), null);
     assert.match(await content.textContent(), /regeneracji pierwszeństwo/);
     assert.match(await content.textContent(), /Narastające|Silne sygnały zmęczenia/);
     assert.match(await content.textContent(), /Wnioski na kolejny tydzień/);

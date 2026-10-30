@@ -115,6 +115,25 @@ function renderWeeklyCoachReview(data) {
         ${data.status === "no_execution_data" ? `<p class="weekly-review-notice">Brak zapisanych wykonań w tym tygodniu. Sprawdź synchronizację; nie oznacza to automatycznie, że treningi zostały opuszczone.</p>` : ""}
         <h3>${escapeHtml(coach.headline)}</h3>
         <p>${escapeHtml(coach.summary)}</p>
+        <div class="weekly-review-story">
+            ${findings("Co dał ten tydzień treningów?", coach.training_benefits || [], "Brakuje wiarygodnych wykonań, aby wskazać zrealizowane bodźce. To nie oznacza, że trening nie przyniósł korzyści.")}
+            <section class="weekly-review-load">
+                <h4>Czy coś było za mocno?</h4>
+                <p>${escapeHtml(coach.load_interpretation || "Sprawdź oceny wykonania i regenerację poniżej.")}</p>
+                <p class="muted">${escapeHtml(fatigueLabels[recovery.fatigue_signal] || recovery.fatigue_signal)}.</p>
+                ${findings("Sygnały wymagające uwagi", coach.attention, "W ocenionych danych nie znaleziono dodatkowych sygnałów wymagających uwagi.")}
+            </section>
+            ${coach.goal_context ? `<section class="weekly-review-goal">
+                <h4>Jak to przybliża do celu?</h4>
+                <p class="weekly-review-goal-target">${escapeHtml(coach.goal_context.label)} · ${escapeHtml(coach.goal_context.target_pace)}${coach.goal_context.target_date ? ` · ${escapeHtml(formatWeeklyDate(coach.goal_context.target_date))}` : ""}</p>
+                <p>${escapeHtml(coach.goal_context.summary)}</p>
+                <p class="muted">${escapeHtml(coach.goal_context.limitation)}</p>
+            </section>` : `<p class="muted">Brak skonfigurowanego celu czasowego — nie oceniamy związku tygodnia z konkretnym wynikiem.</p>`}
+        </div>
+        ${findings("Wnioski na kolejny tydzień", coach.next_steps, "Uzupełnij dane przed oceną kolejnego tygodnia.")}
+        <p class="muted">To wskazówki do Twojej decyzji. Plan treningowy pozostaje pod Twoją kontrolą.</p>
+        <details class="weekly-review-statistics">
+        <summary>Statystyki i szczegóły regeneracji</summary>
         <dl class="weekly-review-metrics">
             <div><dt>Zaplanowane jednostki</dt><dd>${number(summary.planned_training_count)}</dd></div>
             <div><dt>Wykonane sesje</dt><dd>${number(summary.executed_sessions_count)}</dd></div>
@@ -144,10 +163,8 @@ function renderWeeklyCoachReview(data) {
                 <li>${escapeHtml(label)} — trend: ${escapeHtml(trendLabels[recovery.trend[metric].direction])}</li>
             `).join("")}
         </ul>
-        ${findings("Co wyszło dobrze", coach.positives, "Za mało dowodów, aby wskazać mocne strony tygodnia.")}
-        ${findings("Na co zwrócić uwagę", coach.attention, "W ocenionych danych nie znaleziono dodatkowych sygnałów wymagających uwagi.")}
-        ${findings("Wnioski na kolejny tydzień", coach.next_steps, "Uzupełnij dane przed oceną kolejnego tygodnia.")}
-        <p class="muted">To wskazówki do Twojej decyzji. Plan treningowy pozostaje pod Twoją kontrolą.</p>
+        ${findings("Zgodność z planem", coach.positives, "Za mało dowodów, aby ocenić zgodność z planem.")}
+        </details>
         <details class="weekly-review-days">
             <summary>Plan i wykonanie dzień po dniu</summary>
             <div class="weekly-review-table-scroll">

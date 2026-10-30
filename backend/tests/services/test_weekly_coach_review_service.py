@@ -304,3 +304,44 @@ def test_running_and_strength_same_day_keep_separate_plan_matches(weekly_setup):
     sessions = result["days"][0]["executed_sessions"]
     assert result["summary"]["paired_workouts_count"] == 2
     assert {s["execution_review"]["planned_workout_type"] for s in sessions} == {"easy_run", "strength"}
+
+
+def test_story_links_supported_stimulus_to_configured_goal(weekly_setup):
+    service, plans, factory = weekly_setup
+    add_plan(plans, kind="threshold")
+    add_workout(factory, kind="threshold")
+    result = service.build()
+    coach = result["coach"]
+    assert [benefit["code"] for benefit in coach["training_benefits"]] == ["threshold"]
+    assert coach["training_benefits"][0]["evidence"]
+    assert coach["goal_context"]["label"] == "10 km w 38:30"
+    assert coach["goal_context"]["target_pace"] == "3:51/km"
+    assert "nie prognoza" in coach["goal_context"]["limitation"]
+    assert "wystarczających danych" in coach["load_interpretation"]
+    assert "on_target" not in coach["summary"]
+
+
+def test_story_does_not_sell_excessive_stimulus_as_progress(weekly_setup):
+    service, plans, factory = weekly_setup
+    add_plan(plans, kind="threshold", distance=5, duration=30)
+    add_workout(factory, kind="threshold", distance=10, duration=60)
+    add_recovery(factory, poor=True)
+    coach = service.build()["coach"]
+    assert coach["execution_assessments"]["too_hard"] == 1
+    assert not coach["training_benefits"]
+    assert "sygnały" in coach["load_interpretation"]
+    assert "Nie ma dość" in coach["goal_context"]["summary"]
+
+
+def test_empty_story_and_missing_goal_do_not_invent_progress(weekly_setup):
+    service, _, _ = weekly_setup
+
+    class NoGoal:
+        def get(self):
+            return None
+
+    service.goal_service = NoGoal()
+    coach = service.build()["coach"]
+    assert not coach["training_benefits"]
+    assert coach["goal_context"] is None
+    assert "wykluczyć" in coach["load_interpretation"]
