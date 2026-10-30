@@ -900,9 +900,9 @@ h3 {
 .weekly-review-story > section {
     padding: 16px;
     margin: 14px 0;
-    border: 1px solid #dbe3eb;
+    border: 1px solid #242a33;
     border-radius: 12px;
-    background: #f8fafc;
+    background: #101318;
 }
 .weekly-review-story h4 { margin-top: 0; }
 .weekly-review-goal-target { font-weight: 600; }
