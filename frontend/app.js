@@ -41,14 +41,15 @@ function escapeHtml(value) {
 }
 
 async function loadDashboard() {
-    ensureAICoachCard();
-
-    await Promise.all([
-        loadToday(),
-        loadTrainingOverview(),
-        loadRecentWorkouts(),
-        loadWeeklyCoachReview(),
-    ]);
+    const view = currentAppView();
+    if (view === "week") {
+        await Promise.all([loadWeeklyCoachReview(), loadTrainingOverview()]);
+    } else if (view === "coach") {
+        await openCoachChat();
+    } else {
+        ensureAICoachCard();
+        await Promise.all([loadToday(), loadRecentWorkouts()]);
+    }
 }
 
 
@@ -942,9 +943,6 @@ function renderToday(data) {
         data.planned_workout
     );
 
-    renderTrainingContext(
-        data.training_context
-    );
 
     if (
         data.status === "completed"
@@ -1507,48 +1505,6 @@ function renderReasons(
 }
 
 
-function renderTrainingContext(
-    context
-) {
-    document.getElementById(
-        "context-running"
-    ).textContent =
-        `${context?.running_distance_km ?? 0} km`;
-
-    document.getElementById(
-        "context-running-sessions"
-    ).textContent =
-        context?.running_sessions ?? 0;
-
-    document.getElementById(
-        "context-quality"
-    ).textContent =
-        context?.quality_sessions ?? 0;
-
-    document.getElementById(
-        "context-long"
-    ).textContent =
-        context?.long_run_sessions ?? 0;
-
-    document.getElementById(
-        "context-strength"
-    ).textContent =
-        context?.strength_sessions ?? 0;
-
-    document.getElementById(
-        "context-cross-training"
-    ).textContent =
-        `${context?.cycling_sessions ?? 0} sessions`;
-
-    document.getElementById(
-        "context-total-time"
-    ).textContent =
-        formatTrainingTime(
-            context?.total_training_min
-        );
-}
-
-
 function renderTrainingOverview(
     context
 ) {
@@ -1839,13 +1795,15 @@ function createRecentWorkoutCard(
         );
     }
 
-    row.appendChild(
-        header
-    );
-
-    row.appendChild(
-        details
-    );
+    const askCoach = document.createElement("button");
+    askCoach.type = "button";
+    askCoach.className = "coach-request-button";
+    askCoach.textContent = "Zapytaj trenera o ten trening";
+    askCoach.addEventListener("click", () => startCoachDiscussion(
+        {kind: "workout", session_id: item.session_id, date: item.date},
+        "Co wynika z tego treningu i jak wspiera mój cel?"
+    ));
+    row.append(header, details, askCoach);
 
     const aiReviewSection =
         createAIWorkoutReviewSection();

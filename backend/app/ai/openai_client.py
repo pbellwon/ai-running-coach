@@ -46,12 +46,15 @@ class PaceMindOpenAIClient:
         self,
         instructions: str,
         input_text: str,
+        max_output_tokens: int | None = None,
     ) -> str:
+        options = {} if max_output_tokens is None else {"max_output_tokens": max_output_tokens}
         response = (
             self.client.responses.create(
                 model=self.model,
                 instructions=instructions,
                 input=input_text,
+                **options,
             )
         )
 

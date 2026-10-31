@@ -799,6 +799,9 @@ class WeeklyReviewService:
             ],
         }
 
+    def planned_between(self, start: date, end: date) -> list:
+        return self._get_planned_workouts(start, end)
+
     def _get_planned_workouts(
         self,
         week_start: date,

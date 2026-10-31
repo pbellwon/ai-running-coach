@@ -1866,3 +1866,8 @@ def save_adaptive_plan_decision(
             result.created_at.isoformat()
         ),
     }
+
+
+from app.api.coach_chat import router as coach_chat_router
+
+app.include_router(coach_chat_router)

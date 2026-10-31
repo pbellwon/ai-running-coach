@@ -66,6 +66,8 @@ async function openDashboard(t, interceptDecision) {
         await route.fulfill({ response });
     });
     const page = await context.newPage();
+    page.observedRequests = [];
+    page.on("request", request => page.observedRequests.push(request.url()));
     await page.goto(`${origin}/index.html`);
     await page.locator('#dashboard').waitFor({ state: 'visible' });
     await page.locator('#adaptive-plan-accept').waitFor({ state: 'visible' });
@@ -145,6 +147,7 @@ test('stale proposal prompts refresh instead of recording acceptance', async t =
 });
 
 async function waitForWeekly(page) {
+    if (await page.locator("#view-week").isHidden()) await page.locator("[data-view=week]").click();
     await page.locator('#weekly-coach-review-card[aria-busy="true"]').waitFor({ state: 'hidden' });
     await page.locator('#weekly-review-content h3').waitFor({ state: 'visible' });
 }
@@ -207,9 +210,13 @@ test('empty weekly data has an explicit state instead of a reassuring verdict', 
 test('weekly failure leaves dashboard usable and retry recovers', async t => {
     await fetch(`${origin}/__test__/weekly-mode/failure`, { method: 'POST' });
     const page = await openDashboard(t);
+    await page.locator('[data-view=week]').click();
     await page.locator('#weekly-review-retry').waitFor({ state: 'visible' });
-    assert.equal(await page.locator('#dashboard').isVisible(), true);
+    await page.locator('[data-view=today]').click();
+    await page.locator('#dashboard').waitFor({state: 'visible'});
     assert.equal(await page.locator('#adaptive-plan-accept').isEnabled(), true);
+    await page.locator('[data-view=week]').click();
+    await page.locator('#weekly-review-retry').waitFor({state: 'visible'});
     assert.match(await page.locator('#weekly-review-state').textContent(), /Nie udało się/);
     await fetch(`${origin}/__test__/weekly-mode/normal`, { method: 'POST' });
     await page.locator('#weekly-review-retry').click();
@@ -253,4 +260,144 @@ test('late weekly response cannot overwrite a newer selection', async t => {
     await page.evaluate(() => window.olderWeeklyRequest);
     assert.match(await page.locator('#weekly-review-period').textContent(), /26 października/);
     assert.match(await page.locator('#weekly-review-state').textContent(), /Tydzień w toku/);
+});
+
+async function unlockChat(page) {
+    await page.locator('[data-view=coach]').click();
+    await page.locator('#coach-access-code').fill('fixture-private-chat-code');
+    await page.getByRole('button', {name: 'Otwórz rozmowę', exact: true}).click();
+    await page.locator('#coach-chat-body').waitFor({state: 'visible'});
+}
+
+test('navigation loads each view on demand and supports browser back', async t => {
+    const page = await openDashboard(t);
+    assert.equal(await page.locator('#view-week').isHidden(), true);
+    assert.equal(page.observedRequests.some(url => url.includes('/review/week')), false);
+    assert.equal(page.observedRequests.some(url => url.includes('/coach/')), false);
+    await page.locator('[data-view=week]').click();
+    await waitForWeekly(page);
+    assert.equal(await page.locator('#view-today').isHidden(), true);
+    await page.locator('[data-view=coach]').click();
+    await page.locator('#view-coach').waitFor({state: 'visible'});
+    await page.goBack();
+    await page.locator('#view-week').waitFor({state: 'visible'});
+    await page.locator('[data-view=today]').click();
+    await page.locator('#dashboard').waitFor({state: 'visible'});
+});
+
+test('chat rejects wrong code, persists history on reload, and escapes all text', async t => {
+    const page = await openDashboard(t);
+    await page.locator('[data-view=coach]').click();
+    await page.locator('#coach-access-code').fill('wrong-code');
+    await page.getByRole('button', {name: 'Otwórz rozmowę', exact: true}).click();
+    await page.locator('#coach-chat-status').filter({hasText: 'Nieprawidłowy kod'}).waitFor();
+    assert.equal(await page.locator('#coach-chat-body').isHidden(), true);
+    await unlockChat(page);
+    await page.locator('#coach-message').fill('Czy trening pomógł? <script>alert(1)</script>');
+    await page.locator('#coach-send').click();
+    await page.locator('#coach-chat-status').filter({hasText: 'Odpowiedź zapisana'}).waitFor();
+    assert.equal(await page.locator('.coach-chat-message').count(), 2);
+    assert.equal(await page.locator('#coach-chat-messages img, #coach-chat-messages script').count(), 0);
+    await page.reload();
+    await page.locator('.coach-chat-message[data-role=coach]').waitFor();
+    assert.equal(await page.locator('.coach-chat-message').count(), 2);
+    await page.getByText('Na czym opieram odpowiedź?', {exact: true}).click();
+    assert.match(await page.locator('#coach-chat-messages').textContent(), /Aktualny cel: 10 km w 38:30/);
+    await page.locator('#coach-lock').click();
+    assert.equal(await page.locator('#coach-chat-body').isHidden(), true);
+    assert.equal(await page.evaluate(() => sessionStorage.getItem('coach-code')), null);
+});
+
+test('weekly discussion carries selected week without automatically sending a question', async t => {
+    const page = await openDashboard(t);
+    await waitForWeekly(page);
+    await page.locator('#weekly-ask-coach').click();
+    await page.locator('#view-coach').waitFor({state: 'visible'});
+    await unlockChat(page);
+    assert.match(await page.locator('#coach-chat-context').textContent(), /19 października/);
+    assert.equal(page.observedRequests.some(url => url.endsWith('/coach/chat')), false);
+    await page.locator('#coach-send').click();
+    await page.locator('#coach-chat-status').filter({hasText: 'Odpowiedź zapisana'}).waitFor();
+    const context = await page.evaluate(() => coachChat.turns[0].context);
+    assert.deepEqual(context, {kind: 'week', week_start: '2026-10-19'});
+});
+
+test('chat retry preserves request identity and does not duplicate a response lost on the network', async t => {
+    const page = await openDashboard(t);
+    await unlockChat(page);
+    let first = true;
+    const ids = [];
+    await page.route(`${productionAPI}/coach/chat`, async route => {
+        ids.push(route.request().postDataJSON().request_id);
+        const response = await route.fetch({url: `${origin}/coach/chat`});
+        if (first) {
+            first = false;
+            await route.fulfill({status: 502, contentType: 'application/json', body: '{}'});
+        } else await route.fulfill({response});
+    });
+    await page.locator('#coach-message').fill('Co dał trening?');
+    await page.locator('#coach-send').click();
+    await page.locator('#coach-retry').waitFor({state: 'visible'});
+    await page.locator('#coach-retry').click();
+    await page.locator('#coach-chat-status').filter({hasText: 'Odpowiedź zapisana'}).waitFor();
+    assert.equal(ids.length, 2);
+    assert.equal(ids[0], ids[1]);
+    assert.equal(await page.locator('.coach-chat-message').count(), 2);
+});
+
+test('chat blocks duplicate sends while waiting and starts a separate conversation', async t => {
+    const page = await openDashboard(t);
+    await unlockChat(page);
+    let release, reached;
+    const blocked = new Promise(resolve => {release = resolve;});
+    const intercepted = new Promise(resolve => {reached = resolve;});
+    let posts = 0;
+    await page.route(`${productionAPI}/coach/chat`, async route => {
+        posts++; reached(); await blocked;
+        const response = await route.fetch({url: `${origin}/coach/chat`});
+        await route.fulfill({response});
+    });
+    await page.locator('#coach-message').fill('Jak trenować dalej?');
+    await page.locator('#coach-send').click();
+    await intercepted;
+    try {
+        assert.equal(await page.locator('#coach-send').isDisabled(), true);
+        assert.equal(await page.locator('#coach-new-conversation').isDisabled(), true);
+        await page.locator('#coach-message-form').evaluate(form => form.dispatchEvent(new Event('submit', {cancelable: true})));
+        assert.equal(posts, 1);
+    } finally {release();}
+    await page.locator('#coach-chat-status').filter({hasText: 'Odpowiedź zapisana'}).waitFor();
+    const previousId = await page.evaluate(() => coachChat.id);
+    await page.locator('#coach-new-conversation').click();
+    assert.equal(await page.locator('.coach-chat-message').count(), 0);
+    await page.locator('#coach-conversation-select').selectOption(previousId);
+    await page.locator('.coach-chat-message[data-role=coach]').waitFor();
+});
+
+test('coach direct link and navigation fit a mobile viewport', async t => {
+    const page = await openDashboard(t);
+    await page.setViewportSize({width: 390, height: 844});
+    await unlockChat(page);
+    await page.reload();
+    await page.locator('#coach-chat-body').waitFor({state: 'visible'});
+    assert.equal(await page.locator('#view-today').isHidden(), true);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    assert.ok((await page.locator('#coach-conversation-select').boundingBox()).width >= 200);
+    const bounds = await page.locator('.app-navigation').boundingBox();
+    assert.ok(bounds.y + bounds.height <= 845);
+});
+
+test('workout discussion carries the selected logical session and date', async t => {
+    const page = await openDashboard(t);
+    const first = page.locator('.recent-workout').first();
+    await first.getByRole('button', {name: 'Zapytaj trenera o ten trening'}).click();
+    await page.locator('#view-coach').waitFor({state: 'visible'});
+    await unlockChat(page);
+    assert.match(await page.locator('#coach-chat-context').textContent(), /26 października/);
+    await page.locator('#coach-send').click();
+    await page.locator('#coach-chat-status').filter({hasText: 'Odpowiedź zapisana'}).waitFor();
+    const context = await page.evaluate(() => coachChat.turns[0].context);
+    assert.equal(context.kind, 'workout');
+    assert.equal(context.date, '2026-10-26');
+    assert.ok(context.session_id);
 });

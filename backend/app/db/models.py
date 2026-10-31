@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Float,
+    ForeignKey,
     Integer,
     String,
     Text,
@@ -309,3 +310,37 @@ class AdaptationDecisionRecordDB(Base):
         DateTime,
         nullable=False,
     )
+
+
+class CoachConversationDB(Base):
+    __tablename__ = "coach_conversations"
+    id = Column(String(36), primary_key=True)
+    title = Column(String(120), nullable=False, default="Nowa rozmowa")
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+
+class CoachChatTurnDB(Base):
+    __tablename__ = "coach_chat_turns"
+    id = Column(String(36), primary_key=True)
+    conversation_id = Column(String(36), ForeignKey("coach_conversations.id"), nullable=False, index=True)
+    request_hash = Column(String(64), nullable=False)
+    message = Column(Text, nullable=False)
+    answer = Column(Text)
+    evidence_json = Column(Text)
+    context_json = Column(Text, nullable=False)
+    status = Column(String(16), nullable=False)
+    lease = Column(String(36), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+
+class CoachChatGateDB(Base):
+    """Shared database gate: limits survive restarts and multiple Cloud Run workers."""
+    __tablename__ = "coach_chat_gate"
+    id = Column(Integer, primary_key=True)
+    day = Column(String(10), nullable=False)
+    attempts = Column(Integer, nullable=False)
+    next_allowed_at = Column(DateTime, nullable=False)
+    busy_until = Column(DateTime, nullable=False)
+    lease = Column(String(36), nullable=False)

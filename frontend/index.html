@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
     <meta charset="UTF-8">
 
@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=8"
+        href="styles.css?v=9"
     >
 </head>
 
@@ -24,8 +24,8 @@
                     PACE MIND
                 </p>
 
-                <h1>
-                    Today
+                <h1 id="page-title" tabindex="-1">
+                    Dzisiaj
                 </h1>
 
                 <p
@@ -54,6 +54,12 @@
             </div>
         </header>
 
+        <nav class="app-navigation" aria-label="Główna nawigacja">
+            <a href="#today" data-view="today" aria-current="page">Dzisiaj</a>
+            <a href="#week" data-view="week">Tydzień</a>
+            <a href="#coach" data-view="coach">Trener</a>
+        </nav>
+        <div id="view-today" data-app-view="today">
         <section
             id="loading-state"
             class="state-card"
@@ -261,6 +267,11 @@
                 </ul>
             </section>
 
+            <section class="card compact-card weekly-shortcut">
+                <p class="section-label">TWÓJ TYDZIEŃ</p>
+                <p id="weekly-shortcut-summary">Co wniósł ostatni tydzień i na co zwrócić uwagę?</p>
+                <a href="#week">Zobacz przegląd tygodnia →</a>
+            </section>
             <section class="card recent-workouts-card">
                 <div class="recent-workouts-heading">
                     <div>
@@ -288,6 +299,9 @@
                 </div>
             </section>
 
+        </div>
+        </div>
+        <div id="view-week" data-app-view="week" class="dashboard" hidden>
             <section id="weekly-coach-review-card" class="card weekly-review-card" aria-labelledby="weekly-review-title">
                 <p class="section-label">WEEKLY COACH REVIEW</p>
                 <h2 id="weekly-review-title">Tygodniowy przegląd trenera</h2>
@@ -302,84 +316,7 @@
                 <p id="weekly-review-state" role="status" aria-live="polite">Wczytywanie przeglądu…</p>
                 <button id="weekly-review-retry" type="button" class="hidden">Spróbuj ponownie</button>
                 <div id="weekly-review-content"></div>
-            </section>
-
-            <section class="card compact-card">
-                <p class="section-label">
-                    TRAINING CONTEXT
-                </p>
-
-                <div class="context-grid">
-                    <div>
-                        <span>
-                            Running
-                        </span>
-
-                        <strong id="context-running">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Running sessions
-                        </span>
-
-                        <strong id="context-running-sessions">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Quality
-                        </span>
-
-                        <strong id="context-quality">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Long runs
-                        </span>
-
-                        <strong id="context-long">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Cross-training
-                        </span>
-
-                        <strong id="context-cross-training">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Strength
-                        </span>
-
-                        <strong id="context-strength">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Total training time
-                        </span>
-
-                        <strong id="context-total-time">
-                            —
-                        </strong>
-                    </div>
-                </div>
+                <button id="weekly-ask-coach" type="button" disabled>Porozmawiaj o tym tygodniu</button>
             </section>
 
             <section class="card compact-card">
@@ -469,10 +406,54 @@
                     </div>
                 </div>
             </section>
+
+        </div>
+        <div id="view-coach" data-app-view="coach" hidden>
+            <section class="card coach-chat-card" aria-labelledby="coach-chat-title">
+                <p class="section-label">COACH CHAT</p>
+                <h2 id="coach-chat-title">Rozmowa z trenerem</h2>
+                <p class="muted">Zapytaj o treningi, regenerację i przygotowania do celu.</p>
+                <form id="coach-unlock-form">
+                    <label for="coach-access-code">Prywatny kod dostępu</label>
+                    <div class="coach-chat-controls">
+                        <input id="coach-access-code" type="password" autocomplete="current-password" required aria-describedby="coach-access-help">
+                        <button type="submit">Otwórz rozmowę</button>
+                    </div>
+                    <p id="coach-access-help" class="muted">Kod pozostaje w tej karcie przeglądarki do wylogowania lub jej zamknięcia.</p>
+                </form>
+                <p id="coach-chat-status" role="status" aria-live="polite"></p>
+                <div id="coach-chat-body" hidden>
+                    <div class="coach-chat-controls">
+                        <label for="coach-conversation-select">Historia rozmów</label>
+                        <select id="coach-conversation-select"><option value="">Nowa rozmowa</option></select>
+                        <button id="coach-new-conversation" type="button">Nowa rozmowa</button>
+                        <button id="coach-lock" type="button">Zamknij dostęp</button>
+                    </div>
+                    <p id="coach-chat-context" class="muted">Kontekst: dzisiejszy trening i aktualne dane.</p>
+                    <button id="coach-clear-context" type="button" hidden>Wróć do dzisiejszych danych</button>
+                    <div class="coach-chat-suggestions" aria-label="Podpowiedzi pytań">
+                        <button type="button" data-question="Dlaczego taka rekomendacja na dziś?">Dzisiejsza rekomendacja</button>
+                        <button type="button" data-question="Jak ostatnie treningi wspierają mój cel na 10 km?">Przygotowania do celu</button>
+                        <button type="button" data-question="Czy są sygnały, że ostatnie obciążenie było zbyt duże?">Obciążenie i regeneracja</button>
+                    </div>
+                    <div id="coach-chat-messages" role="log" aria-label="Rozmowa z trenerem" aria-live="polite"></div>
+                    <form id="coach-message-form">
+                        <label for="coach-message">Twoje pytanie</label>
+                        <textarea id="coach-message" rows="3" maxlength="2000" required placeholder="Co chcesz omówić z trenerem?"></textarea>
+                        <div class="coach-chat-controls">
+                            <button id="coach-send" type="submit">Wyślij</button>
+                            <button id="coach-retry" type="button" hidden>Ponów pytanie</button>
+                            <button id="coach-history-retry" type="button" hidden>Wczytaj historię ponownie</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
         </div>
     </main>
 
-    <script src="weekly-review.js?v=2"></script>
-    <script src="app.js?v=6"></script>
+    <script src="app-navigation.js?v=1"></script>
+    <script src="coach-chat.js?v=1"></script>
+    <script src="weekly-review.js?v=3"></script>
+    <script src="app.js?v=7"></script>
 </body>
 </html>
