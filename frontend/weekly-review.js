@@ -28,6 +28,12 @@ function initializeWeeklyReview() {
         if (currentWeeklyWeek) loadWeeklyCoachReview(currentWeeklyWeek);
     });
     document.getElementById("weekly-review-latest").addEventListener("click", () => loadWeeklyCoachReview(null));
+    document.getElementById("weekly-ask-coach").addEventListener("click", () => {
+        if (selectedWeeklyWeek) startCoachDiscussion(
+            {kind: "week", week_start: selectedWeeklyWeek},
+            "Co dał mi ten tydzień i czy pojawiły się sygnały zbyt dużego obciążenia?"
+        );
+    });
     document.getElementById("weekly-review-retry").addEventListener("click", () => loadWeeklyCoachReview());
 }
 
@@ -44,6 +50,7 @@ async function loadWeeklyCoachReview(weekStart = selectedWeeklyWeek) {
     buttons.forEach(button => { button.disabled = true; });
     retry.classList.add("hidden");
     content.innerHTML = "";
+    document.getElementById("weekly-ask-coach").disabled = true;
     card.setAttribute("aria-busy", "true");
     state.textContent = "Wczytywanie przeglądu…";
     try {
@@ -60,6 +67,10 @@ async function loadWeeklyCoachReview(weekStart = selectedWeeklyWeek) {
             ? `Tydzień w toku — stan na ${formatWeeklyDate(data.as_of_date)}. Dzisiaj i przyszłe jednostki bez wykonania pozostają w planie.`
             : "Zakończony tydzień";
         renderWeeklyCoachReview(data);
+        const shortcut = `${formatWeeklyDate(data.week_start)} – ${formatWeeklyDate(data.week_end)}: ${data.coach.headline}.`;
+        document.getElementById('weekly-shortcut-summary').textContent = shortcut;
+        try { sessionStorage.setItem('weekly-shortcut', shortcut); } catch {}
+        document.getElementById("weekly-ask-coach").disabled = false;
     } catch (error) {
         if (request !== weeklyReviewRequest) return;
         console.error("Could not load weekly review:", error);

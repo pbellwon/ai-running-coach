@@ -92,7 +92,11 @@ app = FastAPI()
 def reset():
     state["proposal"] = make_proposal()
     state["weekly_mode"] = "normal"
+    state["chat_clock"] = 0
     with SessionLocal() as db:
+        db.query(CoachChatTurnDB).delete()
+        db.query(CoachConversationDB).delete()
+        db.query(CoachChatGateDB).delete()
         db.query(AdaptationDecisionRecordDB).delete()
         db.query(WorkoutDB).delete()
         db.query(DailyAthleteStateDB).delete()
@@ -152,8 +156,44 @@ def overview():
 
 @app.get("/workouts/recent-reviews")
 def recent_reviews():
-    return {"items": []}
+    from app.services.recent_execution_review_service import RecentExecutionReviewService
+    return {"items": RecentExecutionReviewService(
+        plan_source=FixturePlanSource(), plan_importer=FixtureImporter(),
+        session_builder=CompositeSessionBuilder(resolver=FixtureResolver()),
+    ).build(target_date=date(2026, 10, 29), limit=3)}
 
 
 app.include_router(main.app.router)
 app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[2] / "frontend"))
+
+# Chat uses real HTTP authentication, SQL persistence and idempotency; only external data/LLM are fixtures.
+import os
+from app.api import coach_chat
+from app.services.coach_chat_service import CoachChatService
+from app.db.models import CoachConversationDB, CoachChatTurnDB, CoachChatGateDB
+os.environ['COACH_CHAT_ACCESS_CODE'] = 'fixture-private-chat-code'
+state['chat_clock'] = 0
+
+
+class FixtureChatContext:
+    def build(self, selection):
+        return {'as_of': '2026-10-29T12:00:00Z', 'selection': selection,
+                'facts': {'goal': '10 km w 38:30'},
+                'sources': [{'label': 'Aktualny cel: 10 km w 38:30'},
+                            {'label': 'Wybrany kontekst', **selection}],
+                'limitations': ['To interpretacja, nie prognoza wyniku.']}
+
+
+class FixtureChatLLM:
+    def generate(self, **kwargs):
+        return 'Ten trening wspiera przygotowania do 10 km. <img src=x onerror=alert(1)> To nie prognoza wyniku.'
+
+
+def fixture_chat_service():
+    state['chat_clock'] += 11
+    return CoachChatService(context=FixtureChatContext(), llm=FixtureChatLLM(),
+                            now=lambda: datetime(2026, 10, 29, 12) + timedelta(seconds=state['chat_clock']))
+
+
+main.app.dependency_overrides[coach_chat.service] = fixture_chat_service
+app.dependency_overrides[coach_chat.service] = fixture_chat_service

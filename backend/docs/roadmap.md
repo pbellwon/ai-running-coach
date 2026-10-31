@@ -14,3 +14,11 @@ osiągnięcia wyniku ani prognozy startowej.
 | 33 | Recovery Intelligence | Łączna interpretacja HRV, tętna spoczynkowego, snu, obciążenia i feedbacku; wykrywanie narastającego zmęczenia. |
 | 34 | Race Readiness / Race Prediction | Ocena gotowości startowej, prognoza wyniku i poziom pewności na podstawie historii treningowej. |
 | 35 | Production Hardening | Stabilność i bezpieczeństwo, migracje, cache, logowanie, monitoring, obsługa błędów, puste stany i testy end-to-end. |
+
+## Stan sprintu 31
+
+Kod Coach Chat i podziału na Dzisiaj/Tydzień/Trener jest przygotowany na gałęzi
+`codex/sprint-31-coach-chat`. Szczegóły działania i wdrożenia: [sprint-31.md](sprint-31.md).
+Lokalnie przeszło 247 testów backendu i 18 testów przeglądarkowych.
+Przed uruchomieniem produkcyjnym wymagane są prywatny kod dostępu w Secret Manager,
+wdrożenie backendu i frontendu oraz sprawdzenie odpowiedzi rzeczywistego modelu.

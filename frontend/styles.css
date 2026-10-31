@@ -907,3 +907,34 @@ h3 {
 .weekly-review-story h4 { margin-top: 0; }
 .weekly-review-goal-target { font-weight: 600; }
 .weekly-review-statistics { margin: 20px 0; }
+
+[hidden] { display: none !important; }
+.app-navigation { display: flex; gap: 8px; margin: 0 0 22px; }
+.app-navigation a { flex: 1; text-align: center; padding: 12px; border: 1px solid #313946; border-radius: 12px; text-decoration: none; color: #b4bdca; background: #14171c; }
+.app-navigation a[aria-current] { color: #f3f4f6; background: #263346; border-color: #93c5fd; }
+.app-navigation a:focus-visible, .coach-chat-card :is(button, input, textarea, select):focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
+.weekly-shortcut a { color: #b8d6ff; }
+.coach-chat-card button { border: 1px solid #596579; border-radius: 8px; background: #202832; color: #f3f4f6; padding: 10px 14px; cursor: pointer; }
+.coach-chat-card button:disabled { opacity: .55; cursor: wait; }
+.coach-chat-card :is(input, textarea, select) { min-width: 0; max-width: 100%; padding: 10px; border: 1px solid #596579; border-radius: 8px; color: #e5e7eb; background: #101318; }
+.coach-chat-card textarea { display: block; width: 100%; margin: 8px 0; resize: vertical; }
+.coach-chat-card label { display: block; margin: 12px 0 6px; }
+.coach-chat-controls, .coach-chat-suggestions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.coach-chat-controls input, .coach-chat-controls select { flex: 1; }
+.coach-chat-message { border: 1px solid #313946; border-radius: 12px; padding: 16px; margin: 16px 0; overflow-wrap: anywhere; }
+.coach-chat-message[data-role="athlete"] { background: #202832; margin-left: 25px; }
+.coach-chat-message[data-role="coach"] { background: #101318; margin-right: 25px; }
+.coach-chat-message p { white-space: pre-wrap; margin-bottom: 8px; line-height: 1.6; }
+.coach-chat-message summary { color: #b8d6ff; cursor: pointer; }
+#coach-chat-messages { max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; }
+#coach-chat-status { color: #c4cbd4; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+    .app-shell { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+    .app-navigation { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; margin: 0; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); background: #0b0d10; border-top: 1px solid #313946; }
+    .coach-chat-card { padding: 16px; }
+    .coach-chat-message { padding: 12px; }
+    .coach-chat-message[data-role="athlete"] { margin-left: 10px; }
+    .coach-chat-message[data-role="coach"] { margin-right: 10px; }
+    .coach-chat-controls label { flex-basis: 100%; }
+    #coach-conversation-select { flex-basis: 100%; }
+}
