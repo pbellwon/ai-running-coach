@@ -423,6 +423,32 @@
                 </form>
                 <p id="coach-chat-status" role="status" aria-live="polite"></p>
                 <div id="coach-chat-body" hidden>
+                    <section id="plan-corrections" class="card">
+                        <h3>Korekta istniejącego treningu</h3>
+                        <p>Wczytaj plan, przygotuj konkretną zmianę i sprawdź podgląd. Zapis nastąpi dopiero po Twojej akceptacji.</p>
+                        <button id="corrections-load" type="button">Wczytaj aktualny plan i historię korekt</button>
+                        <p id="corrections-status" role="status" aria-live="polite"></p>
+                        <form id="corrections-form" hidden>
+                            <label>Trening <select id="corrections-workout" required></select></label>
+                            <label>Wariant <select id="corrections-kind">
+                                <option value="custom">Własna konkretna korekta</option>
+                                <option value="easy">Zastąp spokojnym biegiem (70% objętości)</option>
+                                <option value="rest">Dzień odpoczynku</option>
+                            </select></label>
+                            <label>Tytuł <input id="corrections-title" maxlength="200" required></label>
+                            <label>Dystans (km) <input id="corrections-distance" type="number" min="0" max="300" step="0.1"></label>
+                            <label>Czas (min) <input id="corrections-duration" type="number" min="0" max="2000" step="1"></label>
+                            <label>Obowiązujący przebieg treningu <textarea id="corrections-description" maxlength="4000" rows="4" required></textarea></label>
+                            <label>Uzasadnienie <textarea id="corrections-reason" maxlength="1000" rows="2" required></textarea></label>
+                            <button type="submit">Przygotuj podgląd przed / po</button>
+                        </form>
+                        <div id="corrections-preview" hidden>
+                            <div class="correction-comparison"><div><h4>Przed</h4><pre id="corrections-before"></pre></div><div><h4>Po</h4><pre id="corrections-after"></pre></div></div>
+                            <button id="corrections-accept" type="button">Akceptuję tę zmianę i zapisuję do Google Sheets</button>
+                            <button id="corrections-reject" type="button">Odrzuć zmianę</button>
+                        </div>
+                        <details><summary>Oryginały i historia korekt</summary><div id="corrections-history"></div></details>
+                    </section>
                     <div class="coach-chat-controls">
                         <label for="coach-conversation-select">Historia rozmów</label>
                         <select id="coach-conversation-select"><option value="">Nowa rozmowa</option></select>
@@ -452,7 +478,8 @@
     </main>
 
     <script src="app-navigation.js?v=1"></script>
-    <script src="coach-chat.js?v=1"></script>
+    <script src="coach-chat.js?v=2"></script>
+    <script src="plan-corrections.js?v=1"></script>
     <script src="weekly-review.js?v=3"></script>
     <script src="app.js?v=7"></script>
 </body>

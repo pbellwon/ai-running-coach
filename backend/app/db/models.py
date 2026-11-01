@@ -344,3 +344,18 @@ class CoachChatGateDB(Base):
     next_allowed_at = Column(DateTime, nullable=False)
     busy_until = Column(DateTime, nullable=False)
     lease = Column(String(36), nullable=False)
+
+
+class PlanCorrectionDB(Base):
+    __tablename__ = 'plan_corrections'
+    id = Column(String(36), primary_key=True)
+    request_hash = Column(String(64), nullable=False)
+    payload = Column(Text, nullable=False)
+    status = Column(String(16), nullable=False)
+    created_at = Column(DateTime, nullable=False)
+
+
+class PlanWriteGateDB(Base):
+    __tablename__ = 'plan_write_gate'
+    id = Column(Integer, primary_key=True)
+    owner = Column(String(36), nullable=False)

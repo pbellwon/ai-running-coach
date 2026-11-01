@@ -54,7 +54,7 @@ after(async () => {
 
 async function openDashboard(t, interceptDecision) {
     const context = await browser.newContext();
-    t.after(() => context.close());
+    t.after(async () => { await context.unrouteAll({behavior: 'wait'}); await context.close(); });
     // Every request to the production hostname is intercepted; no production
     // request is sent. Adaptive routes run against the actual local API/SQLite.
     await context.route(`${productionAPI}/**`, async route => {
@@ -400,4 +400,32 @@ test('workout discussion carries the selected logical session and date', async t
     assert.equal(context.kind, 'workout');
     assert.equal(context.date, '2026-10-26');
     assert.ok(context.session_id);
+});
+
+test('correction preview preserves notes, requires acceptance and survives reload', async t => {
+    const page = await openDashboard(t);
+    await unlockChat(page);
+    await page.locator('#corrections-load').click();
+    await page.locator('#corrections-form').waitFor({state: 'visible'});
+    await page.locator('#corrections-kind').selectOption('easy');
+    await page.locator('#corrections-reason').fill('Zmęczenie po ostatnich treningach.');
+    await page.locator('#corrections-form button[type=submit]').click();
+    await page.locator('#corrections-preview').waitFor({state: 'visible'});
+    assert.match(await page.locator('#corrections-before').textContent(), /Threshold/);
+    assert.match(await page.locator('#corrections-after').textContent(), /Spokojny bieg/);
+    assert.match(await page.locator('#corrections-after').textContent(), /Uwagi: zachowaj/);
+    assert.match(await page.locator('#corrections-after').textContent(), /Uzasadnienie: Zmęczenie/);
+    assert.equal(await page.locator('#corrections-preview img').count(), 0);
+    await page.locator('#corrections-accept').click();
+    await page.locator('#corrections-status').filter({hasText: 'zapisana i potwierdzona'}).waitFor();
+    assert.equal(await page.locator('#corrections-accept').isDisabled(), true);
+    await page.reload();
+    await page.locator('#coach-chat-body').waitFor({state: 'visible'});
+    await page.locator('#corrections-load').click();
+    await page.locator('#corrections-status').filter({hasText: 'Aktualny plan'}).waitFor();
+    assert.match(await page.locator('#corrections-history').textContent(), /applied/);
+    assert.match(await page.locator('#corrections-history').textContent(), /Threshold/);
+    assert.equal(await page.locator('#corrections-title').inputValue(), 'Spokojny bieg');
+    await page.setViewportSize({width: 390, height: 844});
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });

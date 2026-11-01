@@ -938,3 +938,9 @@ h3 {
     .coach-chat-controls label { flex-basis: 100%; }
     #coach-conversation-select { flex-basis: 100%; }
 }
+
+#plan-corrections label { display: block; margin: 0.8rem 0; }
+#plan-corrections input, #plan-corrections select, #plan-corrections textarea { display: block; width: 100%; box-sizing: border-box; }
+#plan-corrections pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+.correction-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+@media (max-width: 650px) { .correction-comparison { grid-template-columns: 1fr; } }
