@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from typing import Optional
 
@@ -22,13 +23,19 @@ class PlannedWorkoutEngine:
         # Historical descriptions remain visible, but only the latest accepted
         # prescription determines classification and interval structure.
         active_description = description.rsplit("\n\nObowiązujący trening po korekcie PaceMind:\n", 1)[-1]
-        if active_description != description:
-            active_description = active_description.rsplit("\nPaceMind ", 1)[0]
+        # A generated unit also ends in an audit note. Its words (e.g. "startów")
+        # must not turn an easy run into strides or a race in the classifier.
+        body, separator, note = active_description.rpartition("\nPaceMind ")
+        if separator and re.match(r"\d{4}-\d{2}-\d{2} \| Zmiana:", note):
+            active_description = body
         classification_text = f"{title} {active_description}".strip()
 
-        intent = WorkoutIntentEngine().classify_from_description(
-            classification_text
-        )
+        # Calendar names and notes can contain words such as "Forest" or
+        # "odpoczynek"; a reviewed race entry remains a race regardless of them.
+        if title.startswith("Zawody:") and separator and re.match(r"\d{4}-\d{2}-\d{2} \| Zmiana:", note):
+            intent = WorkoutIntentEngine().classify("race")
+        else:
+            intent = WorkoutIntentEngine().classify_from_description(classification_text)
 
         return PlannedWorkout(
             planned_date=planned_date,

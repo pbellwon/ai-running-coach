@@ -17,7 +17,7 @@ function renderChatContext() {
 }
 function chatControls() {
     const busy = coachChat.busy || coachChat.loading;
-    document.querySelectorAll('#coach-chat-body button, #coach-chat-body select, #coach-message').forEach(node => { if (!node.closest('#plan-corrections')) node.disabled = busy; });
+    document.querySelectorAll('#coach-chat-body button, #coach-chat-body select, #coach-message').forEach(node => { if (!node.closest('#plan-corrections, #race-planning')) node.disabled = busy; });
     document.getElementById('coach-send').textContent = coachChat.busy ? 'Trener odpowiada…' : 'Wyślij';
     document.getElementById('coach-message-form').setAttribute('aria-busy', String(coachChat.busy));
 }

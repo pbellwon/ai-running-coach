@@ -359,3 +359,18 @@ class PlanWriteGateDB(Base):
     __tablename__ = 'plan_write_gate'
     id = Column(Integer, primary_key=True)
     owner = Column(String(36), nullable=False)
+
+
+class TrainingPreferencesDB(Base):
+    __tablename__ = 'training_preferences'
+    id = Column(Integer, primary_key=True)
+    payload = Column(Text, nullable=False)
+
+
+class RacePlanDraftDB(Base):
+    __tablename__ = 'race_plan_drafts'
+    id = Column(String(36), primary_key=True)
+    request_hash = Column(String(64), nullable=False)
+    payload = Column(Text, nullable=False)
+    status = Column(String(16), nullable=False)
+    created_at = Column(DateTime, nullable=False)
