@@ -242,7 +242,34 @@ class FixtureRaceSheet:
         self.rows = deepcopy(after['rows'])
 
 race_sheet = FixtureRaceSheet()
-app.dependency_overrides[race_plans.service] = lambda: RacePlanService(source=race_sheet, now=lambda: datetime(2026, 11, 1, 12))
+from app.services.personal_plan_coach import PersonalPlanCoach
+
+class FixtureAthleteContext:
+    def capture(self, today):
+        return {'version': 'a'*64, 'facts': {'conversations': ['Ustalono cykl 10-dniowy.'], 'memory': ['Dawna kontuzja, zakończony powrót.']},
+                'sources': [{'id': 'history', 'label': 'Historia treningów'}, {'id': 'memory:1', 'label': 'Dawna kontuzja'}],
+                'limitations': ['Tylko rozmowy PaceMind'], 'limits': {'cycle_days': 10, 'max_cycle_km': 45, 'max_session_km': 15, 'max_session_minutes': 90, 'history_sufficient': True}}
+
+class FixturePlanModel:
+    def generate(self, **kwargs):
+        import json
+        days = []
+        for offset in range(10):
+            kind = {0:'easy', 2:'threshold', 4:'easy', 6:'long', 8:'easy'}.get(offset, 'off')
+            km = {'easy':6, 'threshold':8, 'long':12, 'off':0}[kind]
+            days.append({'offset':offset, 'kind':kind, 'distance_km':km, 'duration_min':km*6,
+                         'repetitions':3 if kind=='threshold' else 0, 'work_min':4 if kind=='threshold' else 0,
+                         'recovery_min':2 if kind=='threshold' else 0, 'reason':'Odstępy dobrane do reakcji na obciążenie.'})
+        if 'Aktualny ból' in json.loads(kwargs['input_text']).get('athlete_note', ''):
+            return json.dumps({'cycle_days':10, 'status':'pause', 'health':'active', 'start_offset':0,
+                               'anchor_note':'Najpierw doprecyzujmy aktualny ból.', 'explanation':'Nowe zgłoszenie wymaga wyjaśnienia ograniczeń.',
+                               'evidence':['history','athlete_note'], 'questions':['Czy ból występuje także podczas chodzenia?'], 'days':[]})
+        return json.dumps({'cycle_days':10, 'status':'ready', 'health':'historical', 'start_offset':0,
+                           'anchor_note':'Proponuję rozpocząć dzień 1 jutro.', 'explanation':'Historia i dawna kontuzja przemawiają za rozłożeniem bodźców w cyklu 10 dni.',
+                           'evidence':['history','memory:1'], 'questions':[], 'days':days})
+
+app.dependency_overrides[race_plans.service] = lambda: RacePlanService(source=race_sheet, now=lambda: datetime(2026, 11, 1, 12),
+    athlete_context=FixtureAthleteContext(), coach=PersonalPlanCoach(FixturePlanModel()))
 
 @app.post('/__test__/race-calendar-change')
 def change_race_calendar():

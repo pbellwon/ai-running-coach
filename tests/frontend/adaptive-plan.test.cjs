@@ -432,40 +432,33 @@ test('correction preview preserves notes, requires acceptance and survives reloa
 
 async function prepareRacePlan(page) {
     await unlockChat(page);
-    await page.locator('#race-load').click();
-    await page.locator('#race-preferences').waitFor({state: 'visible'});
-    await page.locator('#race-weekly-km').fill('40');
-    await page.locator('#race-easy-pace').fill('6');
-    await page.locator('#race-preferences button[type=submit]').click();
-    await page.locator('#race-status').filter({hasText: 'Preferencje zapisane'}).waitFor();
-    await page.locator('#race-end').fill('2026-12-20');
     await page.locator('#race-generate button[type=submit]').click();
     await page.locator('#race-preview').waitFor({state: 'visible'});
 }
 
-test('full plan preview keeps original, accepts once and restores version and preferences on reload', async t => {
+test('one click proposes a ten-day plan from history without a preferences form', async t => {
     const page = await openDashboard(t);
     await prepareRacePlan(page);
+    assert.equal(await page.locator('#race-preferences').count(), 0);
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 0);
-    assert.match(await page.locator('#race-calendar').textContent(), /Start <img/);
-    assert.equal(await page.locator('#race-calendar img').count(), 0);
-    assert.match(await page.locator('#race-summary').textContent(), /zachowane 1/);
-    assert.match(await page.locator('#race-weeks').textContent(), /Taper/);
+    assert.match(await page.locator('#race-coaching').textContent(), /Historia i dawna kontuzja/);
+    assert.match(await page.locator('#race-weeks').textContent(), /2026-11-11/);
+    assert.match(await page.locator('#race-entries').textContent(), /dzień 10\/10/);
     assert.match(await page.locator('#race-entries').textContent(), /Uwagi trenera: zachowaj/);
-    await page.setViewportSize({width: 390, height: 844});
+    assert.equal(await page.locator('#race-calendar img').count(), 0);
+    await page.setViewportSize({width:390,height:844});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.locator('#race-accept').click();
-    await page.locator('#race-status').filter({hasText: 'Plan zapisany i potwierdzony'}).waitFor();
+    await page.locator('#race-status').filter({hasText:'Plan zapisany i potwierdzony'}).waitFor();
     assert.equal(await page.locator('#race-accept').isDisabled(), true);
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 1);
     await page.reload();
-    await page.locator('#coach-chat-body').waitFor({state: 'visible'});
+    await page.locator('#coach-chat-body').waitFor({state:'visible'});
+    await page.getByText('Zakres planu i dane źródłowe', {exact:true}).click();
     await page.locator('#race-load').click();
-    await page.locator('#race-preferences').waitFor({state: 'visible'});
-    assert.equal(await page.locator('#race-weekly-km').inputValue(), '40');
-    await page.getByText('Historia wersji planu', {exact: true}).click();
+    await page.getByText('Historia wersji planu', {exact:true}).click();
     await page.locator('#race-history button').first().click();
-    await page.locator('#race-preview').waitFor({state: 'visible'});
+    await page.locator('#race-preview').waitFor({state:'visible'});
     assert.match(await page.locator('#race-summary').textContent(), /Stan: Zapisany/);
     assert.equal(await page.locator('#race-accept').isDisabled(), true);
 });
@@ -500,4 +493,16 @@ test('lost full plan save response retries the same immutable version without du
     assert.equal(ids.length, 2);
     assert.equal(ids[0], ids[1]);
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 1);
+});
+
+test('new injury information produces a focused question and blocks plan acceptance', async t => {
+    const page = await openDashboard(t);
+    await unlockChat(page);
+    await page.locator('#race-note').fill('Aktualny ból Achillesa po biegu.');
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-preview').waitFor({state:'visible'});
+    assert.match(await page.locator('#race-blockers').textContent(), /ból występuje także podczas chodzenia/);
+    assert.equal(await page.locator('#race-accept').isDisabled(), true);
+    assert.equal(await page.locator('#race-entries details').count(), 0);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 0);
 });

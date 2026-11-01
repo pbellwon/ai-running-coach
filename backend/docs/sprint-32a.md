@@ -1,177 +1,113 @@
-# Sprint 32A — pełny plan pod kalendarz startów
+# Plan PaceMind — propozycja trenera i cykl 10-dniowy
 
-W zakładce **Trener** dostępny jest panel **Plan pod kalendarz startów**.
-Po odblokowaniu prywatnym kodem zawodnik:
+Generator po korekcie wymagań zastępuje formularz dni tygodnia, limitów czasu,
+kilometrażu i tempa przyciskiem **Zaproponuj mój plan**. Zawodnik nie układa
+harmonogramu za trenera. Opcjonalnie dopowiada aktualne odczucia lub odpowiada
+na konkretne pytanie PaceMind. Zakres dat i zachowanie istniejących treningów
+są dostępne w rozwijanych opcjach, z rozsądnymi wartościami domyślnymi.
 
-1. Wczytuje świeży kalendarz i plan oraz zapisane preferencje.
-2. Wybiera 2–6 dni treningowych, dzień długiego biegu, limity minut na każdy
-   dzień, obecną tolerowaną objętość tygodniową i spokojne tempo w min/km.
-3. Zapisuje preferencje w bazie. Średnia z zarejestrowanych biegów ostatnich
-   28 dni jest wskazówką do samodzielnej weryfikacji kompletności historii.
-   Nie ustala automatycznie obciążenia i nie zastępuje danych zawodnika.
-4. Wybiera okres od jutra (początek najwyżej 30 dni naprzód), do maksymalnie
-   366 dni. Okres musi zawierać przynajmniej jeden start główny A.
-5. Generuje wersję z porównaniem przed/po wszystkich dni, tygodniami,
-   kilometrażem, fazą przygotowań i najbliższym startem A. Sprawdza ostrzeżenia.
-6. Osobno akceptuje cały podgląd lub odrzuca wersję. Generowanie nie zapisuje
-   niczego w Google Sheets.
+Przepływ: dane zawodnika i cel → propozycja trenera z uzasadnieniem → podgląd
+przed/po w cyklach 10-dniowych → osobna akceptacja → zapis do Google Sheets.
+Nie oznacza to gwarancji matematycznie optymalnego planu ani skuteczności
+określonego bodźca na podstawie samej korelacji historycznej.
 
-Domyślnie koniec okresu przypada siedem dni po najbliższym starcie A; można go
-wydłużyć, aby objąć kolejne starty. Kalendarz służy do budowania planu, a nie do
-zmiany dotychczasowego źródła celu w innych modułach aplikacji.
+## Dane i interpretacja
 
-## Google Sheets
+`PersonalPlanContext` odczytuje aktualną trwałą bazę:
 
-Dotychczasowy `plan_import` i jego kolumny pozostają kompatybilne. Jedyna nowa
-zakładka to `race_calendar` w **tym samym skoroszycie**. Nagłówki w pierwszym
-wierszu muszą dokładnie odpowiadać poniższym nazwom:
+- treningi z 84 dni: objętość, czas, typy, obciążenie, RPE, tętno i opisy;
+- aktywną pamięć zawodnika: ograniczenia, kontuzje i zapisane ustalenia;
+- 60 ostatnich zakończonych wymian oraz do 30 starszych wypowiedzi o zdrowiu
+  i cyklu; wypowiedzi zawodnika i odpowiedzi AI są rozdzielone;
+- 120 ostatnich zapisów feedbacku oraz 28 dni regeneracji;
+- istniejące oceny wykonania do 20 ostatnich jednostek, kiedy są dostępne.
 
-| date | name | distance_km | priority | target_time | notes |
-| --- | --- | --- | --- | --- | --- |
-| 2026-12-13 | Bieg główny | 10 | A | 38:30 | Trasa płaska |
-| 2026-11-15 | Start kontrolny | 5 | B | | |
+Dostęp dotyczy rozmów zapisanych **w PaceMind**. Backend nie ma dostępu do
+innych rozmów w ChatGPT. Istotne ustalenia spoza aplikacji można dopowiedzieć
+trenerowi albo utrwalić w istniejącej pamięci zawodnika. Długie odpowiedzi AI
+są ograniczane do 1000 znaków, z jawną flagą skrócenia; wiadomości zawodnika
+pozostają w całości. Skrócone opisy 30 ostatnich aktywności uzupełniają pełne
+sumy dni z 84 dni. Aktywna pamięć nie jest skracana.
 
-`date` ma format YYYY-MM-DD, dystans to dodatnia liczba do 100 km (akceptowany
-przecinek dziesiętny), priorytet A/B/C. Wartości `target_time` i `notes` są
-opcjonalne, ale ich nagłówki muszą istnieć. Czas: MM:SS lub HH:MM:SS; najlepiej
-zapisać go jako zwykły tekst, aby Sheets nie zmienił formatu wyświetlania.
-Puste wiersze są pomijane. Dwa starty w jednym dniu, brak nagłówków, niepoprawna
-data/liczba lub nieznany priorytet blokują generowanie z komunikatem.
+Kalendarz `race_calendar` jest źródłem dat, dystansów, priorytetów i celów
+czasowych startów. Kontuzja historyczna nie oznacza automatycznie aktualnego
+bólu; brak zgłoszenia bólu nie potwierdza zdrowia. Przy nierozstrzygniętym
+ograniczeniu trener ma zapytać, a nie wygenerować pozornie dopasowany plan.
+Informacja z rozmowy nie jest automatycznie dopisywana do pamięci.
 
-Nie potrzeba zakładek na preferencje, szkice ani historię — są w trwałej bazie.
-Opcjonalna zmienna `GOOGLE_RACE_WORKSHEET_NAME` zmienia nazwę `race_calendar`.
-Pozostałe ustawienia arkusza i konto Google są wspólne ze sprintem 32.
+## Indywidualna propozycja i granice liczbowe
 
-## Reguły generowania
+Istniejący klient OpenAI proponuje strukturę dokładnie 10 dni: spokojne biegi,
+kontrolowany próg, długi bieg i odpoczynek, z konkretnymi objętościami, czasem,
+odcinkami i uzasadnieniem. Odpowiedź musi wskazać istniejące źródła; walidator
+odrzuca wymyślone identyfikatory oraz brak odniesienia do historii.
+Stare odpowiedzi AI nie są dowodem zgody zawodnika ani skuteczności treningu.
 
-Generator jest deterministyczny i nie wywołuje płatnego modelu. Bazuje na jawnie
-zapisanych warunkach zawodnika oraz datach, dystansach i priorytetach startów.
-Nie estymuje formy i nie wyprowadza tempa treningowego z docelowego czasu.
-Tekst uwag jest zachowywany jako tekst, nie jako instrukcja generatora.
+Plan nie jest podziałem tygodnia na siedem dni. Ma pozycję dnia 1–10 i kolejne
+cykle co 10 dni. Jeżeli pozycja w dotychczasowym cyklu jest znana z ustaleń,
+trener ją kontynuuje; inaczej jawnie proponuje nowy początek w uzasadnieniu.
+Zawody, taper i regeneracja działają na rzeczywistych datach.
 
-- Przygotowania obejmują bazę, budowanie, specyfikę startową, tygodnie lżejsze,
-  taper i regenerację. Kolejny start A rozpoczyna kolejny cykl po regeneracji.
-- Wzrost budżetu tygodniowego: 5% na tydzień cyklu, maksymalnie do 130% wskazanej
-  objętości. Co czwarty tydzień obniża budżet o 20%.
-- W ostatnich dwóch tygodniach A budżet wynosi najwyżej 70%, a w tygodniu startu
-  50% bazowej objętości. Tydzień B ma limit 80%; C nie powoduje osobnego taperu.
-- Start zastępuje jednostkę dnia i zużywa budżet kilometrowy tygodnia.
-  Start poza wybranym dniem treningowym jest widocznym wyjątkiem w ostrzeżeniu.
-- Długi spokojny bieg ma większy udział w objętości (większy dla startów ponad
-  10 km), lecz respektuje limit minut zawodnika. Akcent kontrolowanego progu
-  pojawia się najwyżej raz na tydzień po bazie; długość odcinków zależy od etapu,
-  dystansu najbliższego A i czasu jednostki. Nie ma akcentów w tygodniach taperu
-  ani w siedmiu dniach poprzedzających start. Dni z innymi mocnymi sesjami i starty
-  uwzględniane są przy zapewnianiu odstępu co najmniej trzech dni.
-- Po starcie do 10 km są dwa dni bez nowego biegania, po starcie do 21,1 km
-  cztery, do 42,2 km siedem, powyżej dziesięć. Zbyt bliskie kolejne zawody
-  generują jawne ostrzeżenie, bez usuwania startów zawodnika.
-- Każdy pozostały dzień ma konkretną jednostkę lub odpoczynek. Czasy zwykłych
-  jednostek nie przekraczają limitu dnia. Jednostka krótsza niż 15 min jest
-  zastępowana odpoczynkiem. Czas zawodów nie jest prognozowany.
-- Starty i zachowane treningi odejmowane są od dostępnego kilometrażu;
-  generator nie dokłada pełnego tygodnia obok istniejącego planu. Niepełne tygodnie
-  mają proporcjonalny budżet. Limity mogą uniemożliwić wykorzystanie całej objętości
-  — podgląd pokazuje rzeczywisty kilometraż i ostrzega o dużej różnicy.
+Dane dają konserwatywne granice propozycji: kilometraż ostatnich 28 dni
+przeliczony na 10 dni, długość i czas obserwowanych jednostek z marginesem
+10%. Model nie może sam zwiększyć objętości pierwszego cyklu. Minimum danych
+to sześć dni z bieganiem w ostatnich 28 dniach i bieg w ostatnich siedmiu dniach;
+przy mniejszej historii nie ma płatnego wywołania modelu ani zgadywania obciążeń.
+To kontrola dostępności danych, nie ocena gotowości do startu.
 
-Bieżące sygnały regeneracji nadal obsługuje istniejący moduł korekt ze sprintu 32;
-nowy generator nie zastępuje codziennej oceny ani nie zapisuje odczuć do pamięci.
+Walidacja wymaga co najmniej dwóch dni odpoczynku, najwyżej jednego długiego
+biegu i dwóch akcentów w mikrocyklu. Mocne dni są oddalone co najmniej o trzy
+dni, także przy przejściu dzień 10 → dzień 1. Odcinki muszą mieścić się w czasie
+jednostki wraz z rozgrzewką, przerwami i schłodzeniem. Niespójna odpowiedź modelu
+zwraca błąd bez zapisu i bez zastąpienia jej ogólnym planem tygodniowym.
 
-## Ochrona istniejącego planu
+Kolejne cykle rozwijają tę samą indywidualną strukturę o najwyżej 3% na cykl,
+łącznie do 115%; co czwarty cykl jest lżejszy. Taper A/B, starty, regeneracja
+zależna od dystansu i zachowane jednostki ograniczają objętość. Akcenty kolidujące
+ze startem lub inną mocną jednostką są zastępowane spokojnym biegiem.
+Przyszłe cykle są rozwinięciem strategii, nie oddzielnymi prognozami AI.
+Po nowych odczuciach lub wykonanych cyklach można zaproponować plan ponownie
+z aktualnych danych.
 
-Domyślnie generator **uzupełnia puste dni** i zachowuje wszystkie istniejące
-wiersze. Opcja przebudowy pozwala zastąpić pojedyncze, niechronione jednostki
-w wybranym przyszłym okresie. Nie zmienia dat istniejących wierszy i nie usuwa
-wierszy. Dni z wieloma jednostkami oraz zaakceptowane pojedyncze korekty są
-chronione; nie są scalane ani zastępowane generatorem.
+## Zachowane zabezpieczenia i historia
 
-W przebudowanym opisie zachowane są wcześniejsza treść, uwagi i historia,
-po nich obowiązujący trening oraz końcowa notka PaceMind z datą, zakresem
-zmiany i uzasadnieniem. Pozostałe kolumny i priorytet istniejącego wiersza
-pozostają nietknięte. Oryginalny i wynikowy arkusz zapisane są także w audycie
-wersji w bazie. Kolejna przebudowa wygenerowanego planu jest możliwa; późniejsza
-pojedyncza korekta ponownie chroni daną jednostkę.
+Pozostają: niezmienny podgląd, osobna akceptacja, oryginał i historia opisów,
+końcowa notka PaceMind z datą, zakresem i powodem, ochrona zaakceptowanych
+pojedynczych korekt, ochrona dni z wieloma jednostkami oraz wspólna trwała
+blokada zapisu z modułem korekt sprintu 32. Zmiana danych zawodnika — w tym nowa
+rozmowa, informacja o bólu lub feedback — unieważnia wcześniejszy podgląd przed
+zapisem, podobnie jak zmiana kalendarza lub arkusza.
 
-Zachowane jednostki mogą ograniczyć taper lub regenerację — podgląd ostrzega
-o tym jawnie. Jeśli zachowany trening w dniu startu nie odpowiada zawodom,
-podgląd ma konflikt i akceptacja jest zablokowana. Trzeba skorygować jednostkę
-osobno albo wybrać przebudowę, jeśli wiersz nie jest chroniony.
+Cały plan zapisuje się jednym atomowym `spreadsheets.batchUpdate`, literalnym
+tekstem. Zachowane uwagi i inne kolumny nie są przepisywane. Po utracie
+odpowiedzi backend sprawdza wynik zamiast ponawiać zapis. Niepewny zapis
+pozostaje zablokowany do potwierdzenia lub rozstrzygnięcia przez administratora.
+Google Sheets nadal nie oferuje compare-and-swap; ręczna edycja między ostatnim
+odczytem a zapisem pozostaje ograniczeniem, więc w czasie akceptacji należy
+wstrzymać edycję arkusza.
 
-## Trwałość i bezpieczne ponowienia
+Stare wersje i tabela dawnych preferencji pozostają dla audytu. Stare podglądy
+generatora tygodniowego można oglądać i odrzucić, lecz nie można ich teraz
+zaakceptować. Stany już zapisane oraz sprawdzanie rozpoczętego zapisu działają
+nadal. Endpoint zapisu dawnych preferencji zwraca 410. Nie ma nowych tabel,
+sekretów ani zakładek arkusza.
 
-Nowe tabele: `training_preferences` i `race_plan_drafts`. Tworzy je dotychczasowe
-`Base.metadata.create_all`, bez zmian istniejących tabel. Preferencje zapisują się
-z kontrolą wersji. Historia pokazuje ostatnich 30 wersji planu, starsze pozostają
-w bazie. Każdy podgląd jest niezmiennym rekordem z UUID, źródłami, preferencjami,
-stanem, pełnym audytem oryginału i wyniku oraz porównaniem jednostek.
+## Koszt, wdrożenie i sprawdzenie
 
-Przed zapisem backend ponownie odczytuje **cały plan i kalendarz**, porównuje ich
-wersje oraz aktualne preferencje i sprawdza, czy początek nie jest już miniony.
-Zmiana uwag, kolejności wierszy, daty startu lub celu czasowego także unieważnia
-podgląd. Akceptacja przesyła wyłącznie ID i decyzję, nigdy zmodyfikowane wiersze.
+Model korzysta z istniejących `OPENAI_API_KEY` i `OPENAI_MODEL`, z timeoutem
+60 s, bez automatycznych ponowień SDK i z limitem 4500 tokenów odpowiedzi.
+Generowanie współdzieli z czatem trwałą bramkę: 10 s odstępu, 60 prób na dobę
+UTC i jedno aktywne wywołanie. Bramka jest odnawiana po zebraniu ocen, przed
+modelem; wygasła próba nie zapisuje podglądu. Ponowienie zapisanego UUID nie
+wywołuje AI ponownie. Awaria modelu nie zmienia arkusza.
 
-Całość zapisuje się jednym atomowym żądaniem Sheets `spreadsheets.batchUpdate`
-z `updateCells` i ewentualnym zwiększeniem liczby wierszy. Nie ma sekwencyjnego
-zapisu kolejnych treningów. Istniejące niezmienione komórki, w tym dodatkowe
-kolumny, nie są przepisywane. Tekst zapisuje się jako `stringValue`, więc nazwa
-lub uwaga zaczynająca się od `=` nie staje się formułą. Nowe dni są dopisywane na
-końcu arkusza, aby zachować identyfikację fizycznych wierszy istniejących korekt.
+Wdrożyć backend przed frontendem, zachowując dotychczasowe sekrety i bazę.
+`race_calendar` i `plan_import` mają dotychczasowe kolumny, bez zmian układu.
+Testy używają kontrolowanego modelu i arkusza, bez produkcyjnych zapisów.
 
-Pełny plan i pojedyncze korekty używają tej samej trwałej blokady
-`plan_write_gate`. Dwa zapisy PaceMind nie nakładają się. Ponowienie tego samego
-UUID zwraca istniejący podgląd/wynik; inna treść z tym samym ID daje 409.
-Po błędzie lub utracie odpowiedzi backend sprawdza pełną zgodność arkusza
-z oczekiwanym wynikiem. Nie wysyła planu ponownie. Niepewny stan `writing`
-pozostaje zablokowany także po restarcie. Przycisk i historia pozwalają ponowić
-**sprawdzenie wyniku**, bez drugiego dopisania dni.
-
-Jeśli zgodności nie da się potwierdzić, administrator porównuje `before_snapshot`
-i `after_snapshot` z rzeczywistym arkuszem w `race_plan_drafts.payload`.
-Procedura rozstrzygnięcia blokady odpowiada sprintowi 32: po upewnieniu się,
-że żaden poprzedni proces nie może już wysłać zapisu, transakcyjnie oznaczyć
-wersję jako `stale` i wyczyścić właściciela bramki tylko dla jej UUID. Nie należy
-zwalniać niepewnego zapisu automatycznie.
-
-Google Sheets nadal nie oferuje atomowego warunku „zapisz, jeśli komórki mają
-poprzednie wartości”. Ręczna edycja między ostatnim odczytem a żądaniem zapisu
-pozostaje możliwa; podczas akceptacji planu należy wstrzymać ręczne edycje.
-Atomowy batch chroni przed częściowym zapisem, a blokada przed jednoczesnymi
-zapisami PaceMind; wymaga wspólnej trwałej bazy dla wszystkich instancji.
-
-## API i wdrożenie
-
-Wszystkie endpointy wymagają dotychczasowego prywatnego kodu Bearer i zwracają
-`Cache-Control: no-store`:
-
-- `GET /coach/race-plans/context` — świeży kalendarz, wersje planu i ustawień.
-- `PUT /coach/race-plans/preferences` — `version` i `value` z preferencjami.
-- `POST /coach/race-plans/preview` — UUID `id`, `plan_version`,
-  `calendar_version`, `preferences_version`, `start`, `end`, `replace_existing`.
-- `GET /coach/race-plans` — ostatnie wersje.
-- `GET /coach/race-plans/{UUID}` — pełny podgląd zapisanej wersji.
-- `POST /coach/race-plans/{UUID}/decision` — `decision: accept` albo `reject`.
-
-Nie potrzeba nowych sekretów. Konto Google musi mieć prawo edycji skoroszytu.
-Wdrożyć backend przed frontendem, zachowując dotychczasową trwałą bazę:
-
-```sh
-gcloud run deploy pacemind-backend --source backend --region=europe-central2 --project=pacemind-503211
-npx --yes firebase-tools deploy --only hosting --project=pacemind-503211
-```
-
-## Weryfikacja
-
-- Backend: `cd backend && .venv/bin/python -m pytest tests -q` — **288 passed**.
-- Chromium: `cd tests/frontend && npm test` — **22 passed**.
-
-Testy obejmują walidację kalendarza i ustawień, cały okres z odpoczynkiem,
-wiele startów A, starty B/C, taper, regenerację, limity czasu i kilometrażu,
-odstępy między mocnymi jednostkami, ochronę korekt i wielu jednostek dnia,
-zachowanie oryginału i innych kolumn, ponowną przebudowę, przestarzałe źródła,
-autoryzację, odrzucenie i konflikt decyzji, utratę odpowiedzi, wspólną bramkę
-z pojedynczymi korektami oraz atomowy batch z literalnym tekstem.
-Przeglądarka sprawdza podgląd, zapis, ponowne otwarcie historii i preferencji,
-zmianę kalendarza, ponowienie po utracie odpowiedzi, tekst HTML i szerokość telefonu.
-Google Sheets jest zastąpiony kontrolowanym źródłem; produkcyjny arkusz nie był
-odczytywany ani zmieniany w trakcie implementacji. Jego nagłówki i uprawnienia
-zostaną zweryfikowane przy wczytaniu panelu po wdrożeniu.
+Weryfikacja końcowa: **290 testów backendu i 23 testy Chromium przeszły**.
+Sprawdzono także starszą rozmowę o kontuzji poza ostatnimi 60 wymianami,
+ciągłość pozycji w cyklu 10-dniowym, odmowę użycia podglądu ze starego generatora,
+walidację źródeł i obciążeń modelu, blokadę akceptacji po nowym zgłoszeniu bólu
+oraz ponowienie zapisu bez duplikatów. Rzeczywista odpowiedź modelu produkcyjnego
+nie była w tym środowisku wywoływana.
