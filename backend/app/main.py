@@ -1875,3 +1875,7 @@ app.include_router(coach_chat_router)
 from app.api.plan_corrections import router as plan_corrections_router
 
 app.include_router(plan_corrections_router)
+
+from app.api.race_plans import router as race_plans_router
+
+app.include_router(race_plans_router)

@@ -93,7 +93,13 @@ def reset():
     state["proposal"] = make_proposal()
     state["weekly_mode"] = "normal"
     state["chat_clock"] = 0
+    correction_sheet.__init__()
+    race_sheet.__init__()
     with SessionLocal() as db:
+        db.query(RacePlanDraftDB).delete()
+        db.query(TrainingPreferencesDB).delete()
+        db.query(PlanCorrectionDB).delete()
+        db.query(PlanWriteGateDB).delete()
         db.query(CoachChatTurnDB).delete()
         db.query(CoachConversationDB).delete()
         db.query(CoachChatGateDB).delete()
@@ -164,7 +170,6 @@ def recent_reviews():
 
 
 app.include_router(main.app.router)
-app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[2] / "frontend"))
 
 # Chat uses real HTTP authentication, SQL persistence and idempotency; only external data/LLM are fixtures.
 import os
@@ -215,3 +220,37 @@ class FixtureCorrectionSheet:
 
 correction_sheet = FixtureCorrectionSheet()
 app.dependency_overrides[plan_corrections.service] = lambda: PlanCorrectionService(source=correction_sheet)
+
+
+from app.api import race_plans
+from app.services.race_plan_service import RacePlanService
+from app.db.models import RacePlanDraftDB, TrainingPreferencesDB
+
+class FixtureRaceSheet:
+    def __init__(self):
+        self.rows = [{'date': '2026-11-03', 'title': 'Threshold', 'description': '3 x 10 min threshold. Uwagi trenera: zachowaj.',
+                      'planned_distance_km': '10', 'planned_duration_min': '60', 'priority': 'key', 'uwagi': '=literal'}]
+        self.races = [{'date': '2026-12-13', 'name': 'Start <img src=x onerror=alert(1)>', 'distance_km': '10',
+                       'priority': 'A', 'target_time': '38:30', 'notes': 'Trasa płaska'}]
+        self.writes = 0
+    def correction_snapshot(self):
+        return {'source': ['fixture-race', '1'], 'headers': list(self.rows[0]), 'rows': deepcopy(self.rows)}
+    def race_calendar_snapshot(self):
+        return {'source': ['fixture-race', '2'], 'headers': list(self.races[0]), 'rows': deepcopy(self.races)}
+    def write_generated_plan(self, before, after):
+        self.writes += 1
+        self.rows = deepcopy(after['rows'])
+
+race_sheet = FixtureRaceSheet()
+app.dependency_overrides[race_plans.service] = lambda: RacePlanService(source=race_sheet, now=lambda: datetime(2026, 11, 1, 12))
+
+@app.post('/__test__/race-calendar-change')
+def change_race_calendar():
+    race_sheet.races[0]['target_time'] = '39:00'
+    return {'ok': True}
+
+@app.get('/__test__/race-write-count')
+def race_write_count():
+    return {'count': race_sheet.writes}
+
+app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[2] / "frontend"))

@@ -85,3 +85,43 @@ class GoogleSheetsPlanSource:
                    for i, key in enumerate(snapshot['headers']) if before[key] != after[key]]
         # RAW prevents user text beginning with '=' from becoming a spreadsheet formula.
         worksheet.batch_update(changes, value_input_option='RAW')
+
+    def race_calendar_snapshot(self):
+        client = gspread.service_account(filename=self.credentials_path)
+        spreadsheet = client.open_by_key(self.spreadsheet_id)
+        worksheet = spreadsheet.worksheet(os.getenv('GOOGLE_RACE_WORKSHEET_NAME', 'race_calendar'))
+        values = worksheet.get_all_values()
+        if not values or len(set(values[0])) != len(values[0]) or any(not h.strip() for h in values[0]):
+            raise ValueError('Missing or duplicate calendar headers')
+        headers = values[0]
+        if any(len(row) > len(headers) for row in values[1:]):
+            raise ValueError('Calendar contains cells without headers')
+        return {'source': [self.spreadsheet_id, str(worksheet.id)], 'headers': headers,
+                'rows': [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in values[1:]]}
+
+    def write_generated_plan(self, before, after):
+        """One atomic Sheets request including grid growth; only changed cells are touched."""
+        worksheet = self._correction_worksheet()
+        if [self.spreadsheet_id, str(worksheet.id)] != before['source']:
+            raise ValueError('Worksheet changed')
+        if before['headers'] != after['headers'] or len(after['rows']) < len(before['rows']):
+            raise ValueError('Plan headers or existing rows cannot be removed')
+        requests = []
+        needed_rows = len(after['rows']) + 1
+        if needed_rows > worksheet.row_count:
+            requests.append({'appendDimension': {'sheetId': worksheet.id, 'dimension': 'ROWS',
+                                                 'length': needed_rows - worksheet.row_count}})
+        for row_index, row in enumerate(after['rows'], 1):
+            old = before['rows'][row_index - 1] if row_index <= len(before['rows']) else {}
+            for column_index, header in enumerate(after['headers']):
+                value = row[header]
+                if value == old.get(header, ''):
+                    continue
+                requests.append({'updateCells': {
+                    'range': {'sheetId': worksheet.id, 'startRowIndex': row_index, 'endRowIndex': row_index + 1,
+                              'startColumnIndex': column_index, 'endColumnIndex': column_index + 1},
+                    'rows': [{'values': [{'userEnteredValue': {'stringValue': value}}]}],
+                    'fields': 'userEnteredValue'}})
+        if requests:
+            # stringValue preserves literal user text, including leading '='. No formula evaluation.
+            worksheet.spreadsheet.batch_update({'requests': requests})

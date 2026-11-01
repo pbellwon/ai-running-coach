@@ -429,3 +429,75 @@ test('correction preview preserves notes, requires acceptance and survives reloa
     await page.setViewportSize({width: 390, height: 844});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
 });
+
+async function prepareRacePlan(page) {
+    await unlockChat(page);
+    await page.locator('#race-load').click();
+    await page.locator('#race-preferences').waitFor({state: 'visible'});
+    await page.locator('#race-weekly-km').fill('40');
+    await page.locator('#race-easy-pace').fill('6');
+    await page.locator('#race-preferences button[type=submit]').click();
+    await page.locator('#race-status').filter({hasText: 'Preferencje zapisane'}).waitFor();
+    await page.locator('#race-end').fill('2026-12-20');
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-preview').waitFor({state: 'visible'});
+}
+
+test('full plan preview keeps original, accepts once and restores version and preferences on reload', async t => {
+    const page = await openDashboard(t);
+    await prepareRacePlan(page);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 0);
+    assert.match(await page.locator('#race-calendar').textContent(), /Start <img/);
+    assert.equal(await page.locator('#race-calendar img').count(), 0);
+    assert.match(await page.locator('#race-summary').textContent(), /zachowane 1/);
+    assert.match(await page.locator('#race-weeks').textContent(), /Taper/);
+    assert.match(await page.locator('#race-entries').textContent(), /Uwagi trenera: zachowaj/);
+    await page.setViewportSize({width: 390, height: 844});
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.locator('#race-accept').click();
+    await page.locator('#race-status').filter({hasText: 'Plan zapisany i potwierdzony'}).waitFor();
+    assert.equal(await page.locator('#race-accept').isDisabled(), true);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 1);
+    await page.reload();
+    await page.locator('#coach-chat-body').waitFor({state: 'visible'});
+    await page.locator('#race-load').click();
+    await page.locator('#race-preferences').waitFor({state: 'visible'});
+    assert.equal(await page.locator('#race-weekly-km').inputValue(), '40');
+    await page.getByText('Historia wersji planu', {exact: true}).click();
+    await page.locator('#race-history button').first().click();
+    await page.locator('#race-preview').waitFor({state: 'visible'});
+    assert.match(await page.locator('#race-summary').textContent(), /Stan: Zapisany/);
+    assert.equal(await page.locator('#race-accept').isDisabled(), true);
+});
+
+test('calendar edit after preview blocks the whole plan write', async t => {
+    const page = await openDashboard(t);
+    await prepareRacePlan(page);
+    await fetch(`${origin}/__test__/race-calendar-change`, {method: 'POST'});
+    await page.locator('#race-accept').click();
+    await page.locator('#race-status').filter({hasText: 'nieaktualne'}).waitFor();
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 0);
+});
+
+test('lost full plan save response retries the same immutable version without duplicate rows', async t => {
+    const page = await openDashboard(t);
+    await prepareRacePlan(page);
+    let first = true;
+    const ids = [];
+    await page.route(`${productionAPI}/coach/race-plans/*/decision`, async route => {
+        ids.push(new URL(route.request().url()).pathname);
+        const response = await route.fetch({url: `${origin}${new URL(route.request().url()).pathname}`});
+        if (first) {
+            first = false;
+            await route.fulfill({status: 502, contentType: 'application/json', body: '{}'});
+        } else await route.fulfill({response});
+    });
+    await page.locator('#race-accept').click();
+    await page.locator('#race-status').filter({hasText: 'Nie udało'}).waitFor();
+    assert.match(await page.locator('#race-accept').textContent(), /Sprawdź wynik/);
+    await page.locator('#race-accept').click();
+    await page.locator('#race-status').filter({hasText: 'Plan zapisany i potwierdzony'}).waitFor();
+    assert.equal(ids.length, 2);
+    assert.equal(ids[0], ids[1]);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 1);
+});

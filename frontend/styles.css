@@ -944,3 +944,14 @@ h3 {
 #plan-corrections pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .correction-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 @media (max-width: 650px) { .correction-comparison { grid-template-columns: 1fr; } }
+
+#race-planning > form > label { display: block; margin: 0.8rem 0; }
+#race-planning input:not([type=checkbox]), #race-planning select { display: block; width: 100%; max-width: 24rem; box-sizing: border-box; }
+#race-planning pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+#race-planning summary { overflow-wrap: anywhere; }
+.race-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; }
+.race-days label { display: block; }
+.race-table-wrap { max-width: 100%; overflow-x: auto; }
+.race-table-wrap table { width: 100%; border-collapse: collapse; }
+.race-table-wrap th, .race-table-wrap td { padding: 0.5rem; text-align: left; }
+#race-blockers { color: var(--danger, #fb7185); }
