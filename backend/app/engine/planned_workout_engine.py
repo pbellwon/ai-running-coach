@@ -19,7 +19,12 @@ class PlannedWorkoutEngine:
         structure: Optional[list[dict]] = None,
     ) -> PlannedWorkout:
 
-        classification_text = f"{title} {description}".strip()
+        # Historical descriptions remain visible, but only the latest accepted
+        # prescription determines classification and interval structure.
+        active_description = description.rsplit("\n\nObowiązujący trening po korekcie PaceMind:\n", 1)[-1]
+        if active_description != description:
+            active_description = active_description.rsplit("\nPaceMind ", 1)[0]
+        classification_text = f"{title} {active_description}".strip()
 
         intent = WorkoutIntentEngine().classify_from_description(
             classification_text
@@ -33,7 +38,7 @@ class PlannedWorkoutEngine:
             intent=intent,
             planned_distance_km=planned_distance_km,
             planned_duration_min=planned_duration_min,
-            structure=structure or WorkoutStructureParser().parse(description),
+            structure=structure or WorkoutStructureParser().parse(active_description),
             priority=priority,
         )
 

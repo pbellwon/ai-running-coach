@@ -60,3 +60,28 @@ class GoogleSheetsPlanSource:
     def _is_empty_row(self, row: dict) -> bool:
 
         return all(str(value).strip() == "" for value in row.values())
+    def _correction_worksheet(self):
+        client = gspread.service_account(filename=self.credentials_path)
+        return client.open_by_key(self.spreadsheet_id).worksheet(self.worksheet_name)
+
+    def correction_snapshot(self):
+        # Preserve exact text, physical row positions, empty cells and additional columns.
+        worksheet = self._correction_worksheet()
+        values = worksheet.get_all_values()
+        if not values or len(set(values[0])) != len(values[0]):
+            raise ValueError('Missing or duplicate plan headers')
+        headers = values[0]
+        if any(len(row) > len(headers) for row in values[1:]):
+            raise ValueError('Plan contains cells without headers')
+        return {'source': [self.spreadsheet_id, str(worksheet.id)], 'headers': headers,
+                'rows': [dict(zip(headers, row + [''] * (len(headers) - len(row)))) for row in values[1:]]}
+
+    def write_correction(self, snapshot, row_number, before, after):
+        from gspread.utils import rowcol_to_a1
+        worksheet = self._correction_worksheet()
+        if [self.spreadsheet_id, str(worksheet.id)] != snapshot['source']:
+            raise ValueError('Worksheet changed')
+        changes = [{'range': rowcol_to_a1(row_number, i + 1), 'values': [[after[key]]]}
+                   for i, key in enumerate(snapshot['headers']) if before[key] != after[key]]
+        # RAW prevents user text beginning with '=' from becoming a spreadsheet formula.
+        worksheet.batch_update(changes, value_input_option='RAW')

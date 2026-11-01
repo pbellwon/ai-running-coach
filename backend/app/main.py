@@ -1871,3 +1871,7 @@ def save_adaptive_plan_decision(
 from app.api.coach_chat import router as coach_chat_router
 
 app.include_router(coach_chat_router)
+
+from app.api.plan_corrections import router as plan_corrections_router
+
+app.include_router(plan_corrections_router)

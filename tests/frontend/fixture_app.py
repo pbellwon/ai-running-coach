@@ -197,3 +197,21 @@ def fixture_chat_service():
 
 main.app.dependency_overrides[coach_chat.service] = fixture_chat_service
 app.dependency_overrides[coach_chat.service] = fixture_chat_service
+
+# Corrections exercise real review/decision persistence; only Sheets is an in-memory fixture.
+from copy import deepcopy
+from app.api import plan_corrections
+from app.services.plan_correction_service import PlanCorrectionService
+from app.db.models import PlanCorrectionDB, PlanWriteGateDB
+
+class FixtureCorrectionSheet:
+    def __init__(self):
+        self.rows = [{'date': '2099-11-02', 'title': 'Threshold', 'description': '3 x 10 min. Uwagi: zachowaj. <img src=x onerror=alert(1)>',
+                      'planned_distance_km': '10', 'planned_duration_min': '60', 'priority': 'high'}]
+    def correction_snapshot(self):
+        return {'source': ['fixture', '1'], 'headers': list(self.rows[0]), 'rows': deepcopy(self.rows)}
+    def write_correction(self, snapshot, row, before, after):
+        self.rows[row - 2] = deepcopy(after)
+
+correction_sheet = FixtureCorrectionSheet()
+app.dependency_overrides[plan_corrections.service] = lambda: PlanCorrectionService(source=correction_sheet)
