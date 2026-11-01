@@ -949,9 +949,9 @@ h3 {
 #race-planning input:not([type=checkbox]), #race-planning select { display: block; width: 100%; max-width: 24rem; box-sizing: border-box; }
 #race-planning pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 #race-planning summary { overflow-wrap: anywhere; }
-.race-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; }
-.race-days label { display: block; }
 .race-table-wrap { max-width: 100%; overflow-x: auto; }
 .race-table-wrap table { width: 100%; border-collapse: collapse; }
 .race-table-wrap th, .race-table-wrap td { padding: 0.5rem; text-align: left; }
 #race-blockers { color: var(--danger, #fb7185); }
+
+#race-planning textarea { display: block; width: 100%; box-sizing: border-box; }

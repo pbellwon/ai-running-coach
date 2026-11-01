@@ -1,11 +1,11 @@
-"""Private calendar, training preferences and full-plan review API."""
+"""Private evidence-based coaching and full-plan review API."""
 from datetime import date
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from gspread.exceptions import WorksheetNotFound
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from app.api.coach_chat import require_chat_access
 from app.services.coach_chat_service import ChatError
 from app.services.race_plan_service import RacePlanService
@@ -13,37 +13,13 @@ from app.services.race_plan_service import RacePlanService
 router = APIRouter(prefix='/coach/race-plans', tags=['race-plans'], dependencies=[Depends(require_chat_access)])
 
 
-class Preferences(BaseModel):
-    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
-    weekdays: list[int] = Field(min_length=2, max_length=6)
-    long_run_day: int = Field(ge=0, le=6)
-    weekly_distance_km: float = Field(ge=5, le=200)
-    easy_pace_min_km: float = Field(ge=3, le=12)
-    max_minutes: dict[str, int]
-
-    @model_validator(mode='after')
-    def check(self):
-        if len(set(self.weekdays)) != len(self.weekdays) or any(d < 0 or d > 6 for d in self.weekdays):
-            raise ValueError('Wybierz od 2 do 6 różnych dni tygodnia.')
-        if self.long_run_day not in self.weekdays:
-            raise ValueError('Długi bieg musi przypadać w wybrany dzień treningowy.')
-        if set(self.max_minutes) != set('0123456') or any(v < 15 or v > 240 for v in self.max_minutes.values()):
-            raise ValueError('Podaj limity 15–240 minut dla każdego dnia tygodnia.')
-        self.weekdays.sort()
-        return self
-
-
-class SettingsRequest(BaseModel):
-    version: str = Field(min_length=64, max_length=64)
-    value: Preferences
-
-
 class PreviewRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: UUID
     plan_version: str = Field(min_length=64, max_length=64)
     calendar_version: str = Field(min_length=64, max_length=64)
-    preferences_version: str = Field(min_length=64, max_length=64)
+    athlete_version: str = Field(min_length=64, max_length=64)
+    note: str = Field(default='', max_length=2000)
     start: date
     end: date
     replace_existing: bool = False
@@ -74,8 +50,8 @@ def context(svc=Depends(service)):
 
 
 @router.put('/preferences')
-def save_preferences(payload: SettingsRequest, svc=Depends(service)):
-    return call(svc.save_preferences, payload.value.model_dump(), payload.version)
+def retired_preferences():
+    raise HTTPException(410, 'Preferencje dni i limitów czasu zastąpiła propozycja trenera oparta na historii i cyklu 10-dniowym.')
 
 
 @router.get('')

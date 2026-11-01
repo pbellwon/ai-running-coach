@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=32a-9"
+        href="styles.css?v=32b-1"
     >
 </head>
 
@@ -424,28 +424,23 @@
                 <p id="coach-chat-status" role="status" aria-live="polite"></p>
                 <div id="coach-chat-body" hidden>
                     <section id="race-planning" class="card">
-                        <h3>Plan pod kalendarz startów</h3>
-                        <p>Wczytaj starty A/B/C z zakładki race_calendar. Nowa wersja planu trafi do arkusza dopiero po sprawdzeniu podglądu i Twojej akceptacji.</p>
-                        <button id="race-load" type="button">Wczytaj kalendarz i wersje planu</button>
+                        <h3>Twój plan PaceMind · cykl 10-dniowy</h3>
+                        <p>Trener zaproponuje układ treningów pod Twój cel, korzystając z historii, odczuć, rozmów zapisanych w PaceMind i informacji o kontuzjach. Sprawdzisz uzasadnienie i cały plan przed akceptacją.</p>
                         <p id="race-status" role="status" aria-live="polite"></p>
-                        <div id="race-calendar"></div>
-                        <form id="race-preferences" hidden>
-                            <h4>Twoje warunki treningowe</h4>
-                            <p>Podaj obecną, tolerowaną objętość. Tempo spokojnego biegu służy tylko do szacowania czasu jednostek; cel startowy nie wyznacza tempa treningów.</p>
-                            <div id="race-days" class="race-days"></div>
-                            <label>Dzień długiego biegu <select id="race-long-day"></select></label>
-                            <label>Obecna objętość (km/tydzień) <input id="race-weekly-km" type="number" min="5" max="200" step="0.1" required></label>
-                            <p id="race-volume-hint" class="muted"></p>
-                            <label>Spokojne tempo (min/km, np. 6.0) <input id="race-easy-pace" type="number" min="3" max="12" step="0.05" required></label>
-                            <button type="submit">Zapisz preferencje</button>
+                        <form id="race-generate">
+                            <label>Dopowiedz trenerowi, jeśli coś się zmieniło (opcjonalnie)
+                                <textarea id="race-note" rows="2" maxlength="2000" placeholder="Np. aktualne odczucia, powrót po przerwie albo odpowiedź na pytanie trenera"></textarea>
+                            </label>
+                            <button type="submit">Zaproponuj mój plan</button>
+                            <details><summary>Zakres planu i dane źródłowe</summary>
+                                <button id="race-load" type="button">Odśwież dane i historię planów</button>
+                                <div id="race-calendar"></div>
+                                <label>Od (domyślnie jutro) <input id="race-start" type="date"></label>
+                                <label>Do (domyślnie tydzień po najbliższym starcie A) <input id="race-end" type="date"></label>
+                                <label><input id="race-replace" type="checkbox" checked> Przebuduj niechronione przyszłe jednostki. Zaakceptowane korekty pozostają chronione.</label>
+                            </details>
                         </form>
-                        <form id="race-generate" hidden>
-                            <h4>Zakres nowej wersji</h4>
-                            <label>Od <input id="race-start" type="date" required></label>
-                            <label>Do <input id="race-end" type="date" required></label>
-                            <label><input id="race-replace" type="checkbox"> Przebuduj istniejące przyszłe jednostki w tym zakresie. Zaakceptowane korekty i dni z wieloma jednostkami pozostają chronione.</label>
-                            <button type="submit">Generuj plan i podgląd przed / po</button>
-                        </form>
+                        <div id="race-coaching"></div>
                         <div id="race-preview" hidden>
                             <h4>Podgląd nowej wersji planu</h4>
                             <p id="race-summary"></p>
@@ -514,7 +509,7 @@
 
     <script src="app-navigation.js?v=1"></script>
     <script src="coach-chat.js?v=3"></script>
-    <script src="race-plans.js?v=1"></script>
+    <script src="race-plans.js?v=2"></script>
     <script src="plan-corrections.js?v=1"></script>
     <script src="weekly-review.js?v=3"></script>
     <script src="app.js?v=7"></script>
