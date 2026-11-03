@@ -280,4 +280,17 @@ def change_race_calendar():
 def race_write_count():
     return {'count': race_sheet.writes}
 
+@app.post('/__test__/protect-race-plan')
+def protect_race_plan():
+    race_sheet.rows = []
+    for offset in range(49):
+        day = date(2026, 11, 2) + timedelta(days=offset)
+        race_day = day == date(2026, 12, 13)
+        title = 'Zawody: Start' if race_day else 'Spokojny bieg'
+        race_sheet.rows.append({'date': day.isoformat(), 'title': title,
+            'description': 'Oryginał\n\nObowiązujący trening po korekcie PaceMind:\n' + title + '\nPaceMind 2026-11-01 | Zmiana: korekta jednostki.',
+            'planned_distance_km': '10' if race_day else '6', 'planned_duration_min': '' if race_day else '36',
+            'priority':'key' if race_day else 'normal', 'uwagi':'zachowaj'})
+    return {'ok': True}
+
 app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[2] / "frontend"))

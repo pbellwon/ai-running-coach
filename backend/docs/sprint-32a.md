@@ -111,3 +111,16 @@ ciągłość pozycji w cyklu 10-dniowym, odmowę użycia podglądu ze starego ge
 walidację źródeł i obciążeń modelu, blokadę akceptacji po nowym zgłoszeniu bólu
 oraz ponowienie zapisu bez duplikatów. Rzeczywista odpowiedź modelu produkcyjnego
 nie była w tym środowisku wywoływana.
+
+## Jasny wynik analizy
+
+Podgląd rozróżnia propozycję gotową do akceptacji, pytanie trenera, konflikt,
+brak zmian oraz stan zapisu. Przy zerze zmian lub nierozstrzygniętym pytaniu
+nie oferuje przycisku akceptacji. Zero zmian nie jest oceną poprawności planu.
+Zachowane jednostki mają indywidualny powód ochrony; pierwsze trzy proponowane
+zmiany są rozwinięte, z widocznym porównaniem przed/po. Nowa próba generowania
+usuwa poprzedni podgląd z ekranu, aby błąd nie pozostawiał starej akceptacji.
+
+Weryfikacja tej poprawki: **291 testów backendu i 26 Chromium przeszło**,
+w tym rzeczywisty przypadek wszystkich jednostek chronionych i braku zmian,
+widoczność propozycji oraz błąd nowego generowania po wcześniejszym podglądzie.

@@ -115,7 +115,14 @@ class RacePlanEngine:
                 offset = (day-anchor).days % 10
                 if day in preserved:
                     for row_no, row in preserved[day]:
-                        entries.append({'row': row_no, 'action': 'keep', 'before': row, 'after': row, 'phase': 'Zachowana jednostka', 'cycle_day': offset+1})
+                        if row_no in protected_rows or self._protected_description(row['description']):
+                            preservation_reason = 'Zaakceptowana pojedyncza korekta jest chroniona przed automatyczną przebudową.'
+                        elif len(preserved[day]) > 1:
+                            preservation_reason = 'W tym dniu jest kilka jednostek; generator zachowuje je bez scalania.'
+                        else:
+                            preservation_reason = 'Wybrano zachowanie istniejących treningów w opcjach planu.'
+                        entries.append({'row': row_no, 'action': 'keep', 'before': row, 'after': row, 'phase': 'Zachowana jednostka',
+                                        'cycle_day': offset+1, 'preservation_reason': preservation_reason})
                     continue
                 unit = pattern[offset]
                 reason = unit['reason']
