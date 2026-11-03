@@ -118,7 +118,7 @@ class RacePlanService:
                     entry['row'] = len(after['rows']) + 1
             changes = sum(e['action'] != 'keep' for e in result['entries'])
             if not changes and strategy['status'] == 'ready':
-                result['blockers'].append('W tym zakresie nie ma zmian do zapisania. Wydłuż okres lub wybierz przebudowę niechronionych jednostek.')
+                result['blockers'].append('W tym zakresie nie powstały zmiany do zapisania. Jednostki pozostały zachowane; sprawdź podane przy nich powody. To nie jest ocena, że obecny plan jest optymalny.')
                 result['can_accept'] = False
             payload = {**request, **result, 'id': identifier, 'created_at': self.now().isoformat(),
                        'planning_mode': 'personal-10-day', 'athlete_context': athlete, 'before_snapshot': snapshot, 'after_snapshot': after,

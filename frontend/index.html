@@ -440,9 +440,10 @@
                                 <label><input id="race-replace" type="checkbox" checked> Przebuduj niechronione przyszłe jednostki. Zaakceptowane korekty pozostają chronione.</label>
                             </details>
                         </form>
-                        <div id="race-coaching"></div>
                         <div id="race-preview" hidden>
-                            <h4>Podgląd nowej wersji planu</h4>
+                            <h4 id="race-outcome-title">Wynik analizy planu</h4>
+                            <p id="race-outcome" role="status" aria-live="polite"></p>
+                            <div id="race-coaching"></div>
                             <p id="race-summary"></p>
                             <ul id="race-warnings"></ul>
                             <ul id="race-blockers"></ul>
@@ -509,7 +510,7 @@
 
     <script src="app-navigation.js?v=1"></script>
     <script src="coach-chat.js?v=3"></script>
-    <script src="race-plans.js?v=2"></script>
+    <script src="race-plans.js?v=3"></script>
     <script src="plan-corrections.js?v=1"></script>
     <script src="weekly-review.js?v=3"></script>
     <script src="app.js?v=7"></script>

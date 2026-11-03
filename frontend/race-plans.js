@@ -11,11 +11,30 @@
         if (current !== epoch) throw new Error('Dostęp został zamknięty.');
         return value;
     }
+    function outcome(value) {
+        const changes = Number(value.summary?.added || 0) + Number(value.summary?.replaced || 0);
+        if (value.status === 'applied') return ['Plan zapisany', 'Zaakceptowany plan został zapisany w Google Sheets.'];
+        if (value.status === 'writing') return ['Sprawdź wynik zapisu', 'Zapis rozpoczęto. Przycisk poniżej sprawdza wynik tej samej operacji.'];
+        if (value.status === 'rejected') return ['Propozycja odrzucona', 'Ta propozycja nie została zapisana do arkusza.'];
+        if (value.status === 'stale') return ['Podgląd nieaktualny', 'Dane zmieniły się. Poproś o nową propozycję planu.'];
+        if (value.coaching && value.coaching.status !== 'ready') return ['Trener potrzebuje odpowiedzi', 'Plan nie został jeszcze ułożony. Odpowiedz na pytanie poniżej w polu „Dopowiedz trenerowi”, a następnie kliknij „Zaproponuj mój plan”.'];
+        if (!changes) return ['Brak zmian do zapisania', 'Nie powstała propozycja zmiany treningów. To nie potwierdza, że obecny plan jest optymalny. Sprawdź powód poniżej — jednostki mogą być zachowane lub chronione.'];
+        if (!value.can_accept) return ['Propozycja wymaga wyjaśnienia', 'Zapis jest zablokowany. Najpierw rozstrzygnij wskazane poniżej pytania lub konflikty.'];
+        return ['Propozycja planu gotowa', `PaceMind proponuje ${value.summary.added} nowych i ${value.summary.replaced} przebudowanych jednostek. Nic nie zostało jeszcze zapisane. Pierwsze zmiany są rozwinięte poniżej — sprawdź porównanie „Przed / Po” przed akceptacją.`];
+    }
     function controls() {
         document.querySelectorAll('#race-planning button, #race-planning input, #race-planning textarea').forEach(node => { node.disabled = busy; });
-        const writable = preview?.planning_mode === 'personal-10-day' && preview.can_accept;
+        const changes = Number(preview?.summary?.added || 0) + Number(preview?.summary?.replaced || 0);
+        const writable = preview?.planning_mode === 'personal-10-day' && preview.can_accept && changes > 0;
+        el('accept').hidden = !preview || !(preview.status === 'writing' || (preview.status === 'preview' && writable));
+        if (preview) {
+            const [title, message] = outcome(preview);
+            el('outcome-title').textContent = title; el('outcome').textContent = message;
+        }
         el('accept').disabled = busy || !preview || !(preview.status === 'writing' || (preview.status === 'preview' && writable));
         el('reject').disabled = busy || !preview || preview.status !== 'preview';
+        el('generate').setAttribute('aria-busy', String(busy));
+        el('generate').querySelector('button[type=submit]').textContent = busy ? 'Przetwarzanie…' : 'Zaproponuj mój plan';
         el('accept').textContent = preview?.status === 'writing' ? 'Sprawdź wynik poprzedniego zapisu planu' : 'Akceptuję plan i zapisuję do Google Sheets';
     }
     async function run(fn) {
@@ -49,16 +68,20 @@
             [cycle.start || cycle.week_start, cycle.end || 'Archiwalny tydzień', cycle.phase, cycle.budget_km, cycle.planned_km].forEach(item => row.append(text('td', item))); table.append(row);
         });
         el('weeks').replaceChildren(table); el('entries').replaceChildren();
+        let opened = 0;
         for (const entry of value.entries) {
             const details = document.createElement('details');
+            if (entry.action !== 'keep' && opened < 3) { details.open = true; opened++; }
             const action = {add: 'Dodany', replace: 'Przebudowany', keep: 'Zachowany'}[entry.action];
             details.append(text('summary', `${entry.after.date}${entry.cycle_day ? ` · dzień ${entry.cycle_day}/10` : ''} — ${entry.after.title} — ${action}`));
+            if (entry.preservation_reason) details.append(text('p', entry.preservation_reason));
             const comparison = document.createElement('div'); comparison.className = 'correction-comparison';
             for (const [label, row] of [['Przed', entry.before], ['Po', entry.after]]) {
                 const column = document.createElement('div'); column.append(text('h5', label), text('pre', workout(row))); comparison.append(column);
             }
             details.append(comparison); el('entries').append(details);
         }
+        el('weeks').hidden = !(value.cycles?.length || value.weeks?.length);
         controls();
     }
     async function history() {
@@ -79,6 +102,8 @@
     el('load').addEventListener('click', () => run(async () => { await load(); status('Aktualne dane wczytane.'); }));
     el('generate').addEventListener('submit', event => {
         event.preventDefault(); run(async () => {
+            preview = null; el('preview').hidden = true; el('coaching').replaceChildren(); controls();
+            status('Pobieram aktualne dane i przygotowuję propozycję…');
             await load();
             const body = {plan_version: context.plan_version, calendar_version: context.calendar_version, athlete_version: context.athlete_version,
                 start: el('start').value, end: el('end').value, replace_existing: el('replace').checked, note: el('note').value};
@@ -86,7 +111,8 @@
             if (!pending || pending.hash !== hash) pending = {hash, id: crypto.randomUUID()};
             status('Trener analizuje historię i układa cykl 10-dniowy…');
             showPreview(await request('/preview', {method: 'POST', body: JSON.stringify({id: pending.id, ...body})}));
-            pending = null; await history(); status(preview.coaching?.status === 'ready' ? 'Propozycja gotowa. Sprawdź uzasadnienie i plan przed akceptacją.' : 'Trener potrzebuje doprecyzowania przed ułożeniem planu.');
+            pending = null; status(outcome(preview)[0] + '. Szczegóły poniżej.');
+            await history();
         });
     });
     for (const decision of ['accept', 'reject']) el(decision).addEventListener('click', () => run(async () => {

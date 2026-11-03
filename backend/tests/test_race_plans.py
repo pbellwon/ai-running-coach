@@ -287,3 +287,22 @@ def test_changed_feedback_invalidates_previously_seen_context(setup):
         db.add(WorkoutFeedbackDB(session_id='new', comment='Aktualny ból', created_at=datetime(2026, 11, 1), updated_at=datetime(2026, 11, 1)))
         db.commit()
     assert context.capture(TODAY)['version'] != first['version']
+
+
+def test_no_changes_is_not_a_positive_assessment_of_the_plan(setup):
+    from datetime import timedelta
+    svc, sheet, _, _, _ = setup
+    sheet.plan['rows'] = []
+    for index in range(49):
+        day = date(2026, 11, 2) + timedelta(days=index)
+        title = 'Zawody: Start' if day == date(2026, 12, 13) else 'Spokojny bieg'
+        sheet.plan['rows'].append(row(day.isoformat(), title=title,
+            planned_distance_km='10' if day == date(2026, 12, 13) else '6',
+            description='Oryginał'+MARKER+title+'\nPaceMind 2026-11-01 | Zmiana: korekta jednostki.'))
+    item = preview(svc)
+    assert item['summary'] == {'added': 0, 'replaced': 0, 'kept': 49}
+    assert not item['can_accept']
+    assert 'nie jest ocena' in item['blockers'][0]
+    assert all('korekta jest chroniona' in e['preservation_reason'] for e in item['entries'])
+    with pytest.raises(ChatError): svc.decide(item['id'], True)
+    assert sheet.writes == 0

@@ -506,3 +506,37 @@ test('new injury information produces a focused question and blocks plan accepta
     assert.equal(await page.locator('#race-entries details').count(), 0);
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 0);
 });
+
+test('zero changes explains protection and does not offer plan acceptance', async t => {
+    await fetch(`${origin}/__test__/protect-race-plan`, {method:'POST'});
+    const page = await openDashboard(t);
+    await prepareRacePlan(page);
+    assert.match(await page.locator('#race-outcome-title').textContent(), /Brak zmian do zapisania/);
+    assert.match(await page.locator('#race-outcome').textContent(), /nie potwierdza/);
+    assert.match(await page.locator('#race-summary').textContent(), /dodane 0, przebudowane 0, zachowane 49/);
+    assert.equal(await page.locator('#race-accept').isHidden(), true);
+    await page.locator('#race-entries details').first().locator('summary').click();
+    assert.match(await page.locator('#race-entries details').first().textContent(), /korekta jest chroniona/);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 0);
+});
+
+test('real proposed changes are open and visible before accepting', async t => {
+    const page = await openDashboard(t);
+    await prepareRacePlan(page);
+    assert.match(await page.locator('#race-outcome-title').textContent(), /Propozycja planu gotowa/);
+    assert.match(await page.locator('#race-outcome').textContent(), /Nic nie zostało jeszcze zapisane/);
+    assert.equal(await page.locator('#race-entries details[open]').count(), 3);
+    assert.equal(await page.locator('#race-entries details[open]').first().getByText('Po', {exact:true}).isVisible(), true);
+    assert.equal(await page.locator('#race-accept').isVisible(), true);
+});
+
+test('failed new generation cannot leave an earlier acceptance button on screen', async t => {
+    const page = await openDashboard(t);
+    await prepareRacePlan(page);
+    assert.equal(await page.locator('#race-accept').isVisible(), true);
+    await page.route(`${productionAPI}/coach/race-plans/context`, route => route.fulfill({status:503, contentType:'application/json', body:JSON.stringify({detail:'Dane niedostępne.'})}));
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-status').filter({hasText:'Dane niedostępne'}).waitFor();
+    assert.equal(await page.locator('#race-preview').isHidden(), true);
+    assert.equal(await page.locator('#race-accept').isHidden(), true);
+});
