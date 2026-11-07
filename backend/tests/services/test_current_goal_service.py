@@ -1,52 +1,13 @@
-from datetime import date
-
-from app.models.goal import Goal
-from app.services.current_goal_service import (
-    CurrentGoalService,
-)
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.db.database import Base
+from app.services.current_goal_service import CurrentGoalService
 
 
-def test_returns_current_primary_goal():
-    goal = CurrentGoalService().get()
-
-    assert isinstance(
-        goal,
-        Goal,
-    )
-
-    assert (
-        goal.goal_type
-        == "race_time"
-    )
-
-    assert (
-        goal.distance_km
-        == 10
-    )
-
-    assert (
-        goal.target_time_sec
-        == 2310
-    )
-
-    assert (
-        goal.target_date
-        == date(
-            2026,
-            11,
-            11,
-        )
-    )
-
-    assert (
-        goal.priority
-        == "A"
-    )
-
-    assert (
-        goal.notes
-        == (
-            "Target 38:30 for 10K "
-            "in Gdynia."
-        )
-    )
+def test_missing_confirmed_goal_has_no_hardcoded_race():
+    engine = create_engine('sqlite://')
+    Base.metadata.create_all(engine)
+    goal = CurrentGoalService(sessionmaker(bind=engine)).get()
+    assert goal.goal_type == 'unconfigured'
+    assert goal.target_date is None and goal.target_time_sec is None and goal.distance_km is None
+    engine.dispose()

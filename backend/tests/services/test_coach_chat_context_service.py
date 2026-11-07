@@ -3,7 +3,12 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 from app.services.coach_chat_context_service import CoachChatContextService
-from app.services.current_goal_service import CurrentGoalService
+from app.models.goal import Goal
+
+
+class CurrentGoalService:
+    def get(self):
+        return Goal('race_time', 10, 2310, date(2026, 11, 11))
 
 
 @dataclass

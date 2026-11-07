@@ -11,6 +11,8 @@ class AthleteGapAnalyzer:
         capabilities: list[Capability],
     ) -> list[Gap]:
 
+        if not goal.distance_km:
+            return []
         gaps = []
 
         for capability in capabilities:

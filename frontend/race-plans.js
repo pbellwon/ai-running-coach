@@ -120,6 +120,10 @@
         showPreview(await request(`/${preview.id}/decision`, {method: 'POST', body: JSON.stringify({decision})}));
         status(preview.status === 'applied' ? 'Plan zapisany i potwierdzony w Google Sheets.' : 'Wersja odrzucona.'); await history();
     }));
+    document.addEventListener('athlete-profile-updated', () => {
+        context = null;
+        if (preview?.status === 'preview') { preview.status = 'stale'; controls(); }
+    });
     document.addEventListener('coach-access-closed', () => {
         epoch++; context = preview = pending = null;
         ['calendar', 'history', 'entries', 'weeks', 'warnings', 'blockers', 'coaching'].forEach(name => el(name).replaceChildren());

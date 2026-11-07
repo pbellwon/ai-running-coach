@@ -21,3 +21,10 @@ class AthleteMemory:
     created_at: datetime
 
     updated_at: datetime
+
+    status: str = "unreviewed"
+    observed_on: str | None = None
+    confirmed_at: datetime | None = None
+    source_turn_id: str | None = None
+    source_quote: str | None = None
+    supersedes_id: int | None = None

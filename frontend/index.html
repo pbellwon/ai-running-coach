@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=32b-1"
+        href="styles.css?v=33-1"
     >
 </head>
 
@@ -423,6 +423,49 @@
                 </form>
                 <p id="coach-chat-status" role="status" aria-live="polite"></p>
                 <div id="coach-chat-body" hidden>
+                    <details id="athlete-knowledge" class="card">
+                        <summary>Co PaceMind o mnie wie</summary>
+                        <p>Wspólne ustalenia dla trenera, planowania i wyjaśnień rekomendacji. Nowa informacja wymaga Twojego potwierdzenia.</p>
+                        <button id="profile-load" type="button">Odśwież profil</button>
+                        <p id="profile-status" role="status" aria-live="polite"></p>
+                        <h4>Cel główny</h4><p id="profile-goal">Wczytaj profil, aby zobaczyć potwierdzony cel.</p>
+                        <button id="profile-calendar-load" type="button">Wybierz cel z kalendarza startów</button>
+                        <form id="profile-goal-form" hidden>
+                            <label>Start A <select id="profile-race" required></select></label>
+                            <button type="submit">Pokaż zmianę celu</button>
+                        </form>
+                        <h4>Cykl 10-dniowy</h4><p id="profile-cycle"></p>
+                        <details><summary>Ustal lub popraw początek cyklu</summary>
+                            <form id="profile-cycle-form">
+                                <label>Data dnia 1 (puste pole oznacza nieustalony początek) <input id="profile-anchor" type="date"></label>
+                                <button type="submit">Pokaż zmianę początku cyklu</button>
+                            </form>
+                        </details>
+                        <h4>Aktualna pamięć</h4><div id="profile-memory"></div>
+                        <details id="profile-editor"><summary>Dodaj lub popraw ustalenie</summary>
+                            <form id="profile-memory-form">
+                                <label>Rodzaj <select id="profile-category">
+                                    <option value="training_agreement">Ustalenie treningowe</option><option value="injury">Kontuzja</option>
+                                    <option value="restriction">Ograniczenie</option><option value="training_response">Reakcja na obciążenie</option><option value="other">Inne</option>
+                                </select></label>
+                                <label>Treść <textarea id="profile-text" rows="3" maxlength="2000" required></textarea></label>
+                                <label>Stan <select id="profile-fact-status"><option value="current">Aktualne</option><option value="historical">Historyczne</option><option value="resolved">Ustąpiło / nieaktualne</option></select></label>
+                                <label>Data zgłoszenia <input id="profile-observed" type="date" required></label>
+                                <p id="profile-editor-source"></p>
+                                <button type="submit">Pokaż ustalenie do zapamiętania</button>
+                                <button id="profile-editor-clear" type="button">Nowe ustalenie</button>
+                            </form>
+                        </details>
+                        <h4>Do potwierdzenia</h4><div id="profile-pending"></div>
+                        <section id="profile-preview" hidden>
+                            <h4 id="profile-preview-title">Zapamiętać jako aktualne ustalenie?</h4>
+                            <p id="profile-source"></p>
+                            <div class="correction-comparison"><div><h5>Przed</h5><pre id="profile-before"></pre></div><div><h5>Po</h5><pre id="profile-after"></pre></div></div>
+                            <button id="profile-accept" type="button">Zapamiętaj</button>
+                            <button id="profile-reject" type="button">Odrzuć propozycję</button>
+                        </section>
+                        <details><summary>Poprzednie wersje i decyzje</summary><div id="profile-history"></div></details>
+                    </details>
                     <section id="race-planning" class="card">
                         <h3>Twój plan PaceMind · cykl 10-dniowy</h3>
                         <p>Trener zaproponuje układ treningów pod Twój cel, korzystając z historii, odczuć, rozmów zapisanych w PaceMind i informacji o kontuzjach. Sprawdzisz uzasadnienie i cały plan przed akceptacją.</p>
@@ -509,8 +552,9 @@
     </main>
 
     <script src="app-navigation.js?v=1"></script>
-    <script src="coach-chat.js?v=3"></script>
-    <script src="race-plans.js?v=3"></script>
+    <script src="coach-chat.js?v=4"></script>
+    <script src="athlete-profile.js?v=1"></script>
+    <script src="race-plans.js?v=4"></script>
     <script src="plan-corrections.js?v=1"></script>
     <script src="weekly-review.js?v=3"></script>
     <script src="app.js?v=7"></script>

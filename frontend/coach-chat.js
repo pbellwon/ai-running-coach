@@ -17,7 +17,7 @@ function renderChatContext() {
 }
 function chatControls() {
     const busy = coachChat.busy || coachChat.loading;
-    document.querySelectorAll('#coach-chat-body button, #coach-chat-body select, #coach-message').forEach(node => { if (!node.closest('#plan-corrections, #race-planning')) node.disabled = busy; });
+    document.querySelectorAll('#coach-chat-body button, #coach-chat-body select, #coach-message').forEach(node => { if (!node.closest('#plan-corrections, #race-planning, #athlete-knowledge')) node.disabled = busy; });
     document.getElementById('coach-send').textContent = coachChat.busy ? 'Trener odpowiada…' : 'Wyślij';
     document.getElementById('coach-message-form').setAttribute('aria-busy', String(coachChat.busy));
 }
@@ -64,8 +64,16 @@ function renderChatMessages() {
         log.appendChild(empty);
     }
     for (const turn of coachChat.turns) {
-        message('athlete', turn.message);
+        const athleteMessage = message('athlete', turn.message);
+        const remember = document.createElement('button'); remember.type = 'button';
+        remember.textContent = 'Zapamiętaj ustalenie z tej wiadomości';
+        remember.addEventListener('click', () => window.openAthleteMemoryDraft?.({text: turn.message, source_turn_id: turn.id, quote: turn.message}));
+        athleteMessage.append(remember);
         const reply = message('coach', turn.answer);
+        for (const proposal of turn.memory_proposals || []) {
+            const offer = window.renderProfileSuggestion?.(proposal);
+            if (offer) reply.append(offer);
+        }
         const details = document.createElement('details');
         const summary = document.createElement('summary');
         summary.textContent = 'Na czym opieram odpowiedź?';

@@ -6,7 +6,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from app.db.database import SessionLocal
-from app.db.models import AthleteMemoryDB
+from app.db.models import AthleteMemoryDB, AthleteMemoryDetailsDB
 from app.models.athlete_memory import (
     AthleteMemory,
 )
@@ -122,10 +122,8 @@ class AthleteMemoryService:
                 .all()
             )
 
-            return [
-                self._to_domain(item)
-                for item in items
-            ]
+            details = {d.memory_id: d for d in db.query(AthleteMemoryDetailsDB).all()}
+            return [self._to_domain(item, details.get(item.id)) for item in items]
 
         finally:
             db.close()
@@ -173,6 +171,7 @@ class AthleteMemoryService:
     def _to_domain(
         self,
         item: AthleteMemoryDB,
+        detail=None,
     ) -> AthleteMemory:
         return AthleteMemory(
             id=item.id,
@@ -183,4 +182,10 @@ class AthleteMemoryService:
             is_active=item.is_active,
             created_at=item.created_at,
             updated_at=item.updated_at,
+            status=detail.status if detail else 'unreviewed',
+            observed_on=detail.observed_on if detail else None,
+            confirmed_at=detail.confirmed_at if detail else None,
+            source_turn_id=detail.source_turn_id if detail else None,
+            source_quote=detail.source_quote if detail else None,
+            supersedes_id=detail.supersedes_id if detail else None,
         )

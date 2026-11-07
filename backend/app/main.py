@@ -15,6 +15,7 @@ from app.analysis.pace_stability_analyzer import PaceStabilityAnalyzer
 from app.analysis.cadence_analyzer import CadenceAnalyzer
 from datetime import date, datetime, timedelta
 from app.models.goal import Goal
+from app.services.current_goal_service import CurrentGoalService
 from app.engine.goal_engine import GoalEngine
 from app.engine.athlete_gap_analyzer import AthleteGapAnalyzer
 from app.engine.goal_feasibility import GoalFeasibility
@@ -380,20 +381,7 @@ def goal_progress(
         or date.today().isoformat()
     )
 
-    goal = Goal(
-        goal_type="race_time",
-        distance_km=10,
-        target_time_sec=2310,
-        target_date=date(
-            2026,
-            10,
-            1,
-        ),
-        priority="A",
-        notes=(
-            "Target 38:30 for 10K."
-        ),
-    )
+    goal = CurrentGoalService().get()
 
     progress = (
         GoalProgressService()
@@ -430,13 +418,7 @@ def goal_gap_test():
 @app.get("/goal/feasibility")
 def goal_feasibility():
 
-    goal = Goal(
-        goal_type="race_time",
-        distance_km=10,
-        target_time_sec=2320,
-        target_date=date(2026, 10, 1),
-        priority="A",
-    )
+    goal = CurrentGoalService().get()
 
     engine = GoalEngine()
     summary = engine.evaluate(goal)
@@ -455,13 +437,7 @@ def athlete_profile():
 @app.get("/athlete/gaps")
 def athlete_gaps():
 
-    goal = Goal(
-        goal_type="race_time",
-        distance_km=10,
-        target_time_sec=2320,
-        target_date=date(2026, 10, 1),
-        priority="A",
-    )
+    goal = CurrentGoalService().get()
 
     athlete = AthleteProfileBuilder().build()
     current = CurrentFitnessEngine().build()
@@ -1503,67 +1479,20 @@ def get_workout_feedback(
     return asdict(result)
 
 
-@app.post("/memory")
-def create_athlete_memory(
-    payload: AthleteMemoryCreatePayload,
-):
-    result = AthleteMemoryService().create(
-        category=payload.category.strip(),
-        memory_text=payload.memory_text.strip(),
-        source="athlete",
-        confidence=payload.confidence,
-    )
-
-    return asdict(result)
+from fastapi import Depends
+from app.api.coach_chat import require_chat_access
 
 
-@app.get("/memory")
+@app.get("/memory", dependencies=[Depends(require_chat_access)])
 def list_athlete_memory():
-    result = AthleteMemoryService().list_active()
-
-    return [
-        asdict(item)
-        for item in result
-    ]
+    return [asdict(item) for item in AthleteMemoryService().list_active()]
 
 
-@app.patch("/memory/{memory_id}")
-def update_athlete_memory(
-    memory_id: int,
-    payload: AthleteMemoryUpdatePayload,
-):
-    result = AthleteMemoryService().update(
-        memory_id=memory_id,
-        category=payload.category.strip(),
-        memory_text=payload.memory_text.strip(),
-        source="athlete",
-        confidence=payload.confidence,
-    )
-
-    if result is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Athlete memory not found.",
-        )
-
-    return asdict(result)
-
-
-@app.post("/memory/{memory_id}/deactivate")
-def deactivate_athlete_memory(
-    memory_id: int,
-):
-    result = AthleteMemoryService().deactivate(
-        memory_id=memory_id,
-    )
-
-    if result is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Athlete memory not found.",
-        )
-
-    return asdict(result)
+@app.post("/memory", dependencies=[Depends(require_chat_access)])
+@app.patch("/memory/{memory_id}", dependencies=[Depends(require_chat_access)])
+@app.post("/memory/{memory_id}/deactivate", dependencies=[Depends(require_chat_access)])
+def retired_memory_write():
+    raise HTTPException(410, "Ustalenia zapisuj przez podgląd i potwierdzenie w profilu zawodnika.")
 
 
 @app.get("/workouts/recent-reviews")
@@ -1879,3 +1808,7 @@ app.include_router(plan_corrections_router)
 from app.api.race_plans import router as race_plans_router
 
 app.include_router(race_plans_router)
+
+from app.api.athlete_profile import router as athlete_profile_router
+
+app.include_router(athlete_profile_router)

@@ -374,3 +374,35 @@ class RacePlanDraftDB(Base):
     payload = Column(Text, nullable=False)
     status = Column(String(16), nullable=False)
     created_at = Column(DateTime, nullable=False)
+
+
+class AthleteProfileStateDB(Base):
+    __tablename__ = 'athlete_profile_state'
+    id = Column(Integer, primary_key=True)
+    revision = Column(Integer, nullable=False, default=0)
+    goal_json = Column(Text)
+    cycle_json = Column(Text, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+
+class AthleteMemoryDetailsDB(Base):
+    __tablename__ = 'athlete_memory_details'
+    memory_id = Column(Integer, ForeignKey('athlete_memory.id'), primary_key=True)
+    status = Column(String(20), nullable=False)
+    observed_on = Column(String(10), nullable=False)
+    source_turn_id = Column(String(36), ForeignKey('coach_chat_turns.id'))
+    source_quote = Column(Text)
+    supersedes_id = Column(Integer, ForeignKey('athlete_memory.id'))
+    confirmed_at = Column(DateTime, nullable=False)
+
+
+class AthleteProfileProposalDB(Base):
+    __tablename__ = 'athlete_profile_proposals'
+    id = Column(String(36), primary_key=True)
+    request_hash = Column(String(64), nullable=False)
+    payload = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False)
+    source_turn_id = Column(String(36), ForeignKey('coach_chat_turns.id'), index=True)
+    created_at = Column(DateTime, nullable=False)
+    decided_at = Column(DateTime)
+    result_json = Column(Text)
