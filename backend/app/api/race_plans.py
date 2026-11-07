@@ -20,6 +20,7 @@ class PreviewRequest(BaseModel):
     calendar_version: str = Field(min_length=64, max_length=64)
     athlete_version: str = Field(min_length=64, max_length=64)
     note: str = Field(default='', max_length=2000)
+    clarification_id: UUID | None = None
     start: date
     end: date
     replace_existing: bool = False
@@ -61,7 +62,7 @@ def history(svc=Depends(service)):
 
 @router.post('/preview')
 def preview(payload: PreviewRequest, svc=Depends(service)):
-    return call(svc.preview, str(payload.id), payload.model_dump(mode='json', exclude={'id'}))
+    return call(svc.preview, str(payload.id), payload.model_dump(mode='json', exclude={'id'}, exclude_none=True))
 
 
 @router.get('/{identifier}')

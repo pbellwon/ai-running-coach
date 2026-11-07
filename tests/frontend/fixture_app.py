@@ -93,6 +93,7 @@ def reset():
     state["proposal"] = make_proposal()
     state["weekly_mode"] = "normal"
     state["chat_clock"] = 0
+    state['clarification_answer_seen'] = False
     correction_sheet.__init__()
     race_sheet.__init__()
     with SessionLocal() as db:
@@ -273,6 +274,14 @@ class FixturePlanModel:
             days.append({'offset':offset, 'kind':kind, 'distance_km':km, 'duration_min':km*6,
                          'repetitions':3 if kind=='threshold' else 0, 'work_min':4 if kind=='threshold' else 0,
                          'recovery_min':2 if kind=='threshold' else 0, 'reason':'Odstępy dobrane do reakcji na obciążenie.'})
+        data=json.loads(kwargs['input_text'])
+        followup=data.get('context',{}).get('clarification')
+        if followup:
+            state['clarification_answer_seen']=bool(followup['questions'] and followup['answer'])
+        if 'Potrzebne pytanie testowe' in data.get('athlete_note','') and not followup:
+            return json.dumps({'cycle_days':10,'status':'clarify','health':'unclear','start_offset':0,
+                'anchor_note':'Początek wymaga potwierdzenia.','explanation':'Doprecyzujmy datę i dolegliwości.',
+                'evidence':['history'],'questions':['Czy od 1 grudnia, a ból ustąpił?'],'days':[]})
         if 'Aktualny ból' in json.loads(kwargs['input_text']).get('athlete_note', ''):
             return json.dumps({'cycle_days':10, 'status':'pause', 'health':'active', 'start_offset':0,
                                'anchor_note':'Najpierw doprecyzujmy aktualny ból.', 'explanation':'Nowe zgłoszenie wymaga wyjaśnienia ograniczeń.',
@@ -309,5 +318,16 @@ def protect_race_plan():
 from app.api import athlete_profile
 from app.services.athlete_profile_service import AthleteProfileService
 app.dependency_overrides[athlete_profile.service] = lambda: AthleteProfileService(source=race_sheet,today=lambda:date(2026,11,1))
+
+@app.post('/__test__/allow-next-planning-attempt')
+def next_planning_attempt():
+    with SessionLocal() as db:
+        db.query(CoachChatGateDB).update({'next_allowed_at':datetime(2000,1,1)})
+        db.commit()
+    return {'ok':True}
+
+@app.get('/__test__/clarification-answer-seen')
+def clarification_answer_seen():
+    return {'seen':state.get('clarification_answer_seen',False)}
 
 app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[2] / "frontend"))

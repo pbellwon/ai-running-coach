@@ -58,7 +58,8 @@ class RacePlanService:
     def history(self):
         with self.factory() as db:
             return {'items': [{'id': item.id, 'status': item.status, **{k: json.loads(item.payload)[k]
-                    for k in ('start', 'end', 'created_at', 'summary')}}
+                    for k in ('start', 'end', 'created_at', 'summary')},
+                    'generation_status':json.loads(item.payload).get('coaching',{}).get('status')}
                 for item in db.query(RacePlanDraftDB).order_by(RacePlanDraftDB.created_at.desc()).limit(30)]}
 
     def get(self, identifier):
@@ -91,6 +92,22 @@ class RacePlanService:
             raise ChatError(409, 'Plan, kalendarz lub informacje o zawodniku zmieniły się. Wczytaj aktualne dane.')
         events = parse_calendar(calendar)
         selected_goal = self._selected_goal(athlete, events)
+        if request.get('clarification_id'):
+            with self.factory() as db:
+                previous = db.get(RacePlanDraftDB, request['clarification_id'])
+                if not previous:
+                    raise ChatError(404, 'Nie znaleziono poprzedniego pytania trenera.')
+                prior = json.loads(previous.payload)
+                if previous.status != 'preview' or prior.get('coaching', {}).get('status') not in ('clarify', 'pause'):
+                    raise ChatError(409, 'Ta wersja nie oczekuje na odpowiedź. Przygotuj nową propozycję.')
+                if not request.get('note', '').strip():
+                    raise ChatError(422, 'Wpisz odpowiedź na pytanie trenera w polu dopowiedzenia.')
+                prior_goal = prior.get('athlete_context', {}).get('facts', {}).get('profile', {}).get('goal')
+                if prior_goal and prior_goal != selected_goal:
+                    raise ChatError(409, 'Cel zmienił się od pytania trenera. Rozpocznij nową propozycję.')
+                athlete['clarification'] = {'questions':prior['coaching']['questions'],
+                    'previous_note':prior.get('note',''), 'previous_start':prior['start'], 'previous_end':prior['end'],
+                    'answer':request['note']}
         athlete['planning_start'] = request['start']
         athlete['planning_end'] = request['end']
         start, end = date.fromisoformat(request['start']), date.fromisoformat(request['end'])

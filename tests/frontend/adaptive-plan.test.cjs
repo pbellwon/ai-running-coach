@@ -601,3 +601,24 @@ test('chat proposes memory but only athlete confirmation saves it; correction ke
     assert.equal(await page.locator('#profile-memory').textContent(),'');
     assert.equal(await page.locator('#profile-history').textContent(),'');
 });
+
+test('answer to a planning question carries the previous question and reveals the generated plan', async t => {
+    const page=await openDashboard(t);
+    await unlockChat(page);
+    await page.locator('#race-note').fill('Potrzebne pytanie testowe');
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-preview').waitFor({state:'visible'});
+    assert.match(await page.locator('#race-summary').textContent(),/Wymaga odpowiedzi/);
+    assert.match(await page.locator('#race-history').textContent(),/Wymaga odpowiedzi/);
+    await fetch(`${origin}/__test__/allow-next-planning-attempt`,{method:'POST'});
+    await page.locator('#race-note').fill('Tak, od 1 grudnia. Ból ustąpił.');
+    await page.getByText('Zakres planu i dane źródłowe',{exact:true}).click();
+    await page.locator('#race-start').fill('2026-12-01');
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-outcome-title').filter({hasText:'Propozycja planu gotowa'}).waitFor();
+    assert.equal((await (await fetch(`${origin}/__test__/clarification-answer-seen`)).json()).seen,true);
+    assert.match(await page.locator('#race-summary').textContent(),/2026-12-01/);
+    assert.ok(await page.locator('#race-entries details').count()>0);
+    assert.equal(await page.locator('#race-accept').isVisible(),true);
+    assert.equal(await page.locator('#race-outcome-title').evaluate(node=>document.activeElement===node),true);
+});
