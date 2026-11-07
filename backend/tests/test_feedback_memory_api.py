@@ -223,64 +223,11 @@ def test_workout_feedback_returns_404_when_missing(
     assert response.status_code == 404
 
 
-def test_athlete_memory_create_list_update_and_deactivate(
-    monkeypatch,
-):
-    monkeypatch.setattr(
-        main_module,
-        "AthleteMemoryService",
-        FakeAthleteMemoryService,
-    )
-
-    response = client.post(
-        "/memory",
-        json={
-            "category": "environment",
-            "memory_text": (
-                "Performs poorly in heat."
-            ),
-            "confidence": 1.0,
-        },
-    )
-
-    assert response.status_code == 200
-
-    memory_id = response.json()["id"]
-
-    response = client.get(
-        "/memory"
-    )
-
-    assert response.status_code == 200
-    assert len(response.json()) == 1
-
-    response = client.patch(
-        f"/memory/{memory_id}",
-        json={
-            "category": "environment",
-            "memory_text": (
-                "Heat strongly affects performance."
-            ),
-            "confidence": 0.9,
-        },
-    )
-
-    assert response.status_code == 200
-    assert (
-        response.json()["memory_text"]
-        == "Heat strongly affects performance."
-    )
-
-    response = client.post(
-        f"/memory/{memory_id}/deactivate"
-    )
-
-    assert response.status_code == 200
-    assert response.json()["is_active"] is False
-
-    response = client.get(
-        "/memory"
-    )
-
-    assert response.status_code == 200
-    assert response.json() == []
+def test_legacy_memory_reads_require_access_and_writes_use_confirmation(monkeypatch):
+    monkeypatch.setenv('COACH_CHAT_ACCESS_CODE', 'test-memory-owner-code')
+    monkeypatch.setattr(main_module, 'AthleteMemoryService', FakeAthleteMemoryService)
+    assert client.get('/memory').status_code == 401
+    headers = {'Authorization': 'Bearer test-memory-owner-code'}
+    assert client.get('/memory', headers=headers).status_code == 200
+    for method, path in [('POST','/memory'),('PATCH','/memory/1'),('POST','/memory/1/deactivate')]:
+        assert client.request(method, path, headers=headers, json={}).status_code == 410

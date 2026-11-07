@@ -32,10 +32,28 @@ class RacePlanService:
         future = [e for e in races if e['date'] > today.isoformat()]
         next_a = next((e for e in future if e['priority'] == 'A'), None)
         athlete = self.athlete_context.capture(today)
+        selected = self._selected_goal(athlete, races)
+        if selected:
+            next_a = selected
+        anchor = athlete.get('facts', {}).get('profile', {}).get('cycle', {}).get('anchor_date')
+        start = max((today+timedelta(days=1)).isoformat(), anchor or '')
         return {'plan_version': digest(snapshot), 'calendar_version': digest(calendar), 'athlete_version': athlete['version'],
                 'races': future, 'cycle_days': 10, 'sources': athlete['sources'], 'limitations': athlete['limitations'],
-                'default_start': (today + timedelta(days=1)).isoformat(),
+                'default_start': start,
                 'default_end': (date.fromisoformat(next_a['date']) + timedelta(days=7)).isoformat() if next_a else None}
+
+    def _selected_goal(self, athlete, events):
+        profile = athlete.get('facts', {}).get('profile')
+        if profile is None:  # Injected test contexts may intentionally omit profile storage.
+            return None
+        goal = profile.get('goal')
+        if not goal:
+            raise ChatError(422, 'Otwórz „Co PaceMind o mnie wie” i potwierdź cel główny z kalendarza startów.')
+        if goal['date'] <= self.now().date().isoformat():
+            raise ChatError(409, 'Potwierdzony start główny odbywa się dziś lub już minął. W profilu wybierz i potwierdź następny cel A.')
+        if goal not in events:
+            raise ChatError(409, 'Potwierdzony cel zmienił się w race_calendar. W profilu wybierz i potwierdź aktualny start A.')
+        return goal
 
     def history(self):
         with self.factory() as db:
@@ -72,11 +90,15 @@ class RacePlanService:
                 or athlete['version'] != request['athlete_version']):
             raise ChatError(409, 'Plan, kalendarz lub informacje o zawodniku zmieniły się. Wczytaj aktualne dane.')
         events = parse_calendar(calendar)
+        selected_goal = self._selected_goal(athlete, events)
+        athlete['planning_start'] = request['start']
         start, end = date.fromisoformat(request['start']), date.fromisoformat(request['end'])
         if start <= self.now().date() or end < start or (end-start).days > 365 or (start-self.now().date()).days > 30:
             raise ChatError(422, 'Wybierz przyszły zakres do 366 dni, rozpoczynający się najwyżej 30 dni naprzód.')
         if not any(e['priority'] == 'A' and start.isoformat() <= e['date'] <= end.isoformat() for e in events):
             raise ChatError(422, 'W okresie planu musi być start główny A.')
+        if selected_goal and not start.isoformat() <= selected_goal['date'] <= end.isoformat():
+            raise ChatError(422, 'Zakres planu musi obejmować potwierdzony start główny.')
         with planning_attempt(self.factory) as check:
             # Recheck after acquiring the shared paid-AI gate: a retried request may already be saved.
             with self.factory() as db:

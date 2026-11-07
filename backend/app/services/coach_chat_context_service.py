@@ -11,12 +11,13 @@ from app.integrations.google_sheets_plan_source import GoogleSheetsPlanSource
 
 
 class CoachChatContextService:
-    def __init__(self, base=None, weekly=None, plan=None, workout=None, today=None):
+    def __init__(self, base=None, weekly=None, plan=None, workout=None, today=None, profile=None):
         self.base = base or CoachContextService()
         self.weekly = weekly
         self.plan = plan
         self.workout = workout
         self.today = today or date.today
+        self.profile = profile
 
     def build(self, selection):
         today = self.today()
@@ -51,6 +52,9 @@ class CoachChatContextService:
                 # Partial upstream failure must not become a fabricated healthy reading.
                 limitations.append(f"{label}: dane są obecnie niedostępne.")
 
+        from app.services.athlete_profile_service import AthleteProfileService
+        profile = self.profile or AthleteProfileService()
+        collect("athlete_profile", "Potwierdzone ustalenia, cel i cykl zawodnika", profile.snapshot)
         collect("goal", "Aktualny cel", lambda: asdict(self.base.current_goal_service.get()))
         collect("athlete", "Rekomendacja dnia, postęp celu i pamięć zawodnika",
                 lambda: asdict(self.base.build(today)), date=today.isoformat())

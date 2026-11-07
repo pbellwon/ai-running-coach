@@ -50,6 +50,9 @@ Nie wymyślaj reakcji, rekordów, poprawy formy ani optymalności. Wyjaśnij co 
 Cel startowy to cel, nie tempo do bezkrytycznego przeliczenia na trening. Kalendarz jest źródłem dat startów.
 Nie przekraczaj limits z danych. Nie zwiększaj dotychczasowej objętości w pierwszym cyklu.
 health=clear wyłącznie przy dostępnych, spójnych danych; nie traktuj braku danych jako braku kontuzji.
+Potwierdzony profil jest wspólnym źródłem celu i ustaleń. Status current/historical/resolved
+ma datę i źródło; nowsze potwierdzenie może zastąpić starą wiadomość. Nowe zgłoszenie bólu wymaga wyjaśnienia.
+Jeżeli profile.cycle.anchor_date jest podane, zachowaj pozycję wyznaczoną przez tę datę i planning_start.
 Zaproponuj nowy początek cyklu start_offset=0, jeśli dotychczasowa pozycja nie jest ustalona, i nazwij to
 propozycją w anchor_note; znaną pozycję kontynuuj. Nie przywiązuj cyklu do poniedziałku.
 Użyj wyłącznie tego schematu:
@@ -82,6 +85,13 @@ Dla clarify/pause days=[] oraz pytanie o brakującą informację. Nie udawaj zap
             raise
         except Exception as exc:
             raise ChatError(502, 'Nie udało się przygotować spójnej propozycji trenera. Ponów generowanie; plan nie został zmieniony.') from exc
+        profile = context.get('facts', {}).get('profile', {})
+        anchor = profile.get('cycle', {}).get('anchor_date')
+        start = context.get('planning_start')
+        if anchor and start and strategy.status == 'ready':
+            from datetime import date
+            strategy.start_offset = (date.fromisoformat(start)-date.fromisoformat(anchor)).days % 10
+            strategy.anchor_note = f"Kontynuuję potwierdzony cykl 10-dniowy od {anchor}; plan zaczyna się od dnia {strategy.start_offset+1}."
         return strategy.model_dump()
 
     @staticmethod

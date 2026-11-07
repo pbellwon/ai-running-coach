@@ -1,5 +1,8 @@
 from datetime import date, datetime, timedelta
 
+from types import SimpleNamespace
+from app.models.goal import Goal
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -54,7 +57,9 @@ def weekly_setup(monkeypatch):
         session_builder=CompositeSessionBuilder(resolver=DeclaredResolver()),
         execution_review_service=reviewer,
     )
-    service = WeeklyCoachReviewService(weekly_service=weekly, today=lambda: TODAY)
+    service = WeeklyCoachReviewService(
+        goal_service=SimpleNamespace(get=lambda: Goal('race_time',10,2310,date(2026,11,11))),
+        weekly_service=weekly, today=lambda: TODAY)
     yield service, plans, factory
     engine.dispose()
 

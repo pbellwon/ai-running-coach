@@ -6,6 +6,7 @@ import math
 from app.db.database import SessionLocal
 from app.db.models import WorkoutDB, AthleteMemoryDB, CoachChatTurnDB, WorkoutFeedbackDB, DailyAthleteStateDB
 from app.services.plan_correction_service import digest
+from app.services.athlete_profile_service import AthleteProfileService
 
 
 class PersonalPlanContext:
@@ -37,6 +38,9 @@ class PersonalPlanContext:
                 'conversations': [fields(t, ['id', 'created_at', 'message', 'answer']) for t in turns],
                 'feedback': [fields(f, ['id', 'session_id', 'perceived_effort', 'execution_feeling', 'comment', 'updated_at']) for f in feedback],
                 'recovery': [fields(w, ['date', 'hrv', 'resting_hr', 'sleep_sec', 'fatigue', 'soreness', 'ctl', 'atl']) for w in wellness]}
+        profile = AthleteProfileService(self.factory).snapshot()
+        raw['profile'] = profile
+        raw['memory'] = [{**m, 'memory_text': m['text'], 'updated_at': m['confirmed_at'] or m['created_at']} for m in profile['memory']]
         daily = defaultdict(lambda: {'km': 0, 'minutes': 0, 'types': []})
         for item in raw['activities']:
             if str(item['sport']).lower() not in ('run', 'running') or not item['distance_km'] or not item['duration_sec']:
@@ -54,10 +58,10 @@ class PersonalPlanContext:
                   'max_session_minutes': round(max((v['minutes'] for v in recent.values()), default=0) * 1.1), 'history_sufficient': enough}
         chats = [{**t, 'answer': (t['answer'] or '')[:1000], 'answer_truncated': len(t['answer'] or '') > 1000} for t in raw['conversations']]
         activities = [{**w, 'description': (w['description'] or '')[:1500]} for w in raw['activities'][-30:]]
-        facts = {'running_days': [{'date': d, **v} for d, v in sorted(daily.items())],
+        facts = {'profile': profile, 'running_days': [{'date': d, **v} for d, v in sorted(daily.items())],
                  'recent_activities': activities, 'memory': raw['memory'],
                  'conversations': chats, 'feedback': raw['feedback'], 'recovery': raw['recovery']}
-        sources = [{'id': 'history', 'label': 'Zarejestrowane treningi: ostatnie 84 dni'}, {'id': 'recovery', 'label': 'Regeneracja: ostatnie 28 dni'}]
+        sources = [{'id': 'profile', 'label': 'Potwierdzony cel, cykl i ustalenia zawodnika'}, {'id': 'history', 'label': 'Zarejestrowane treningi: ostatnie 84 dni'}, {'id': 'recovery', 'label': 'Regeneracja: ostatnie 28 dni'}]
         for key in ('memory', 'conversations', 'feedback'):
             for item in raw[key]:
                 label = (f"Pamięć zawodnika ({item['category']}): {item['memory_text'][:160]}" if key == 'memory' else f"Rozmowa: {item['message'][:120]}" if key == 'conversations' else f"Odczucia po treningu: {(item['comment'] or item['execution_feeling'] or '')[:120]}")

@@ -96,6 +96,14 @@ def reset():
     correction_sheet.__init__()
     race_sheet.__init__()
     with SessionLocal() as db:
+        db.query(AthleteProfileProposalDB).delete()
+        db.query(AthleteMemoryDetailsDB).delete()
+        db.query(AthleteMemoryDB).delete()
+        db.query(AthleteProfileStateDB).delete()
+        import json
+        db.add(AthleteProfileStateDB(id=1,revision=0,
+            goal_json=json.dumps({'date':'2026-11-11','name':'10 km','distance_km':10,'priority':'A','target_time':'38:30','notes':''}),
+            cycle_json=json.dumps({'cycle_days':10,'anchor_date':None}),updated_at=datetime(2026,11,1)))
         db.query(RacePlanDraftDB).delete()
         db.query(TrainingPreferencesDB).delete()
         db.query(PlanCorrectionDB).delete()
@@ -191,6 +199,11 @@ class FixtureChatContext:
 
 class FixtureChatLLM:
     def generate(self, **kwargs):
+        import json
+        question = json.loads(kwargs['input_text']).get('question','')
+        if question == 'Boli mnie Achilles po akcentach.':
+            return json.dumps({'answer':'Czy zapamiętać Twoje zgłoszenie?', 'suggestions':[{'category':'injury',
+                'text':'Ból Achillesa po akcentach.','fact_status':'current','quote':question,'replace_id':None}]})
         return 'Ten trening wspiera przygotowania do 10 km. <img src=x onerror=alert(1)> To nie prognoza wyniku.'
 
 
@@ -224,7 +237,7 @@ app.dependency_overrides[plan_corrections.service] = lambda: PlanCorrectionServi
 
 from app.api import race_plans
 from app.services.race_plan_service import RacePlanService
-from app.db.models import RacePlanDraftDB, TrainingPreferencesDB
+from app.db.models import RacePlanDraftDB, TrainingPreferencesDB, AthleteProfileProposalDB, AthleteProfileStateDB, AthleteMemoryDB, AthleteMemoryDetailsDB
 
 class FixtureRaceSheet:
     def __init__(self):
@@ -292,5 +305,9 @@ def protect_race_plan():
             'planned_distance_km': '10' if race_day else '6', 'planned_duration_min': '' if race_day else '36',
             'priority':'key' if race_day else 'normal', 'uwagi':'zachowaj'})
     return {'ok': True}
+
+from app.api import athlete_profile
+from app.services.athlete_profile_service import AthleteProfileService
+app.dependency_overrides[athlete_profile.service] = lambda: AthleteProfileService(source=race_sheet,today=lambda:date(2026,11,1))
 
 app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[2] / "frontend"))

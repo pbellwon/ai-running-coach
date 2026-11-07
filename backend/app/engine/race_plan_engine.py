@@ -5,7 +5,7 @@ import math
 
 from app.engine.existing_plan_importer import ExistingPlanImporter
 from app.engine.planned_workout_engine import PlannedWorkoutEngine
-from app.services.coach_chat_service import ChatError
+from app.services.coach_errors import ChatError
 
 PLAN_COLUMNS = ExistingPlanImporter.REQUIRED_COLUMNS
 MARKER = '\n\nObowiązujący trening po korekcie PaceMind:\n'

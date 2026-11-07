@@ -2,7 +2,7 @@
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_URL
 
 from sqlalchemy import case, or_
 from sqlalchemy.exc import IntegrityError
@@ -11,12 +11,10 @@ from app.ai.openai_client import PaceMindOpenAIClient
 from app.db.database import SessionLocal
 from app.db.models import CoachConversationDB, CoachChatTurnDB, CoachChatGateDB
 from app.services.coach_chat_context_service import CoachChatContextService
+from app.models.profile_changes import ChatWithMemory, MemoryChange, today as profile_today
 
 
-class ChatError(Exception):
-    def __init__(self, status, message):
-        self.status, self.message = status, message
-        super().__init__(message)
+from app.services.coach_errors import ChatError
 
 
 class CoachChatService:
@@ -33,6 +31,16 @@ Możesz omówić konkretną korektę istniejącego treningu. Zapis wymaga osobne
 Nie przedstawiaj samego wykonania planu jako dowodu poprawy formy.
 Nie diagnozuj urazów. Odpowiedź dotyczy treningu i dostępnych danych.
 Nie wypisuj znaczników HTML. Nie wymyślaj źródeł; aplikacja pokaże źródła fresh_context.
+Zwróć JSON {"answer":"odpowiedź dla zawodnika", "suggestions":[]}.
+Możesz zaproponować najwyżej jedno trwałe ustalenie z BIEŻĄCEJ wiadomości zawodnika:
+{"category":"training_agreement|injury|restriction|training_response|other", "text":"krótkie ustalenie",
+"fact_status":"current|historical|resolved", "quote":"dokładny cytat z bieżącej wiadomości", "replace_id":null}.
+Propozycja nie jest zapisem pamięci: zawodnik zobaczy podgląd i osobno potwierdzi.
+Proponuj tylko jasno zgłoszony fakt, nie pytanie, hipotezę, diagnozę lub własny wniosek.
+Resolved tylko przy jawnym zgłoszeniu ustąpienia problemu. Nie myl dawnej kontuzji z aktualnym bólem.
+replace_id tylko dla istniejącej aktywnej informacji, którą zawodnik wyraźnie poprawia.
+Datę i cel startu ustala się z race_calendar w profilu; sugestia tekstowa nie zmienia celu ani początku cyklu.
+Potwierdzony profil jest wspólnym źródłem ustaleń; starsza rozmowa nie zastępuje nowszej potwierdzonej wersji.
 """
 
     def __init__(self, session_factory=SessionLocal, context=None, llm=None, now=None):
@@ -63,12 +71,16 @@ Nie wypisuj znaczników HTML. Nie wymyślaj źródeł; aplikacja pokaże źród�
             turns = db.query(CoachChatTurnDB).filter_by(conversation_id=conversation_id, status="completed").order_by(CoachChatTurnDB.created_at).all()
             return {"id": conversation_id, "turns": [self._serialize(t) for t in turns]}
 
-    @staticmethod
-    def _serialize(turn):
+    def _serialize(self, turn):
+        from app.services.athlete_profile_service import AthleteProfileService
         return {"id": turn.id, "message": turn.message, "answer": turn.answer,
-                "context": json.loads(turn.context_json), **json.loads(turn.evidence_json)}
+                "context": json.loads(turn.context_json), **json.loads(turn.evidence_json),
+                "memory_proposals": AthleteProfileService(self.factory).for_turn(turn.id)}
 
     def send(self, conversation_id, request_id, message, selection):
+        from app.services.athlete_profile_service import AthleteProfileService
+        profile = AthleteProfileService(self.factory)
+        profile.ensure()
         fingerprint = hashlib.sha256(json.dumps([conversation_id, message, selection], sort_keys=True).encode()).hexdigest()
         now, lease = self.now(), str(uuid4())
         # Ensure a shared gate exists; the unique key resolves concurrent initialization.
@@ -134,11 +146,25 @@ Nie wypisuj znaczników HTML. Nie wymyślaj źródeł; aplikacja pokaże źród�
                 {"fresh_context": context, "history": history, "question": message}, ensure_ascii=False, default=str))
             if not answer or len(answer) > 16000:
                 raise ChatError(502, "Nie udało się przygotować odpowiedzi. Spróbuj ponownie.")
+            suggestions = []
+            if answer.lstrip().startswith('{'):
+                parsed = ChatWithMemory.model_validate_json(answer)
+                answer, suggestions = parsed.answer, parsed.suggestions
             with self.factory() as db:
                 turn = db.get(CoachChatTurnDB, request_id)
                 if turn.lease != lease:
                     raise ChatError(409, "Wiadomość została ponowiona. Odśwież historię rozmowy.")
                 turn.answer, turn.status = answer, "completed"
+                for index, suggestion in enumerate(suggestions):
+                    try:
+                        change = MemoryChange(category=suggestion.category, text=suggestion.text,
+                            fact_status=suggestion.fact_status, replace_id=suggestion.replace_id,
+                            observed_on=profile_today()).model_dump(mode='json')
+                        version = context.get('facts', {}).get('athlete_profile', {}).get('version') or profile._snapshot(db)['version']
+                        profile.stage(db, str(uuid5(NAMESPACE_URL, f'{request_id}:memory:{index}')), version,
+                            change, request_id, suggestion.quote)
+                    except ChatError:
+                        context['limitations'].append('Nie utworzono propozycji pamięci: źródło lub profil wymaga ponownego sprawdzenia.')
                 turn.evidence_json = json.dumps({k: context[k] for k in ("sources", "limitations", "as_of")})
                 turn.updated_at = self.now()
                 conversation = db.get(CoachConversationDB, conversation_id)

@@ -34,6 +34,11 @@ class GoalProgressService:
             target_date
         )
 
+        if goal.goal_type == 'unconfigured':
+            return GoalProgress(target_date=normalized_date, goal_distance_km=0, target_time_sec=0,
+                status='insufficient_data', confidence=0, fitness_trend='unknown', goal_gap='unknown',
+                primary_limiter=None, secondary_limiter=None,
+                evidence=['Najpierw wybierz i potwierdź cel główny w profilu zawodnika.'])
         recent_start = (
             normalized_date
             - timedelta(
