@@ -306,3 +306,31 @@ def test_no_changes_is_not_a_positive_assessment_of_the_plan(setup):
     assert all('korekta jest chroniona' in e['preservation_reason'] for e in item['entries'])
     with pytest.raises(ChatError): svc.decide(item['id'], True)
     assert sheet.writes == 0
+
+
+def test_clarification_answer_preserves_question_and_current_dates(setup):
+    svc,sheet,_,model,_=setup
+    original=strategy()
+    model.value.update(status='clarify',health='unclear',days=[],questions=['Czy potwierdzasz początek 1 grudnia i czy ból ustąpił?'])
+    first=preview(svc,note='Chcę rozpocząć przygotowania po przerwie.')
+    assert not first['entries']
+    assert svc.history()['items'][0]['generation_status']=='clarify'
+    model.value=original
+    answer=preview(svc,start='2026-12-01',clarification_id=first['id'],note='Tak, od 1 grudnia. Ból ustąpił.')
+    sent=model.input['context']
+    assert sent['clarification']['questions']==first['coaching']['questions']
+    assert sent['clarification']['answer']=='Tak, od 1 grudnia. Ból ustąpił.'
+    assert sent['planning_start']=='2026-12-01'
+    assert sent['clarification']['previous_start']=='2026-11-02'
+    assert answer['entries'] and answer['can_accept'] and sheet.writes==0
+
+
+def test_clarification_cannot_use_unrelated_ready_plan_or_empty_answer(setup):
+    svc,_,_,model,_=setup
+    first=preview(svc)
+    with pytest.raises(ChatError): preview(svc,clarification_id=first['id'],note='Tak')
+    assert model.calls==1
+    model.value.update(status='clarify',health='unclear',days=[],questions=['Czy ból ustąpił?'])
+    question=preview(svc)
+    with pytest.raises(ChatError): preview(svc,clarification_id=question['id'],note='')
+    assert model.calls==2

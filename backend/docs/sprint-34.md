@@ -91,3 +91,25 @@ taper, regenerację, krótki horyzont, ograniczenie akcentów do indywidualnej d
 widoczność drogi do A oraz istniejące testy akceptacji i ponowień bez duplikatów.
 Źródła Sheets i model w testach są kontrolowane; nie wywoływano produkcyjnego
 modelu ani nie zapisywano produkcyjnego arkusza.
+
+## Kontynuacja po pytaniu trenera
+
+Kolejna próba może zawierać `clarification_id`, wskazujące szkic oczekujący na
+odpowiedź. Backend odczytuje zapisane pytania i poprzednią notatkę oraz przekazuje
+je z aktualną odpowiedzią i aktualnym zakresem dat do modelu. Nie polega na samej
+krótkiej odpowiedzi pozbawionej pytania. Nie przyjmuje jako pytania gotowego lub
+odrzuconego planu ani odpowiedzi pustej; przy zmianie celu wymaga nowej propozycji.
+Nowe dopowiedzenie i daty mają pierwszeństwo interpretacyjne przed wcześniejszymi
+pytaniami i starymi odczuciami. Nierozstrzygnięte lub nowe objawy nadal wymagają
+wyjaśnienia; poprawka nie zakłada automatycznie ustąpienia kontuzji.
+
+Pytanie w podglądzie i historii ma etykietę „Wymaga odpowiedzi”. Po otrzymaniu
+wyniku strona przenosi fokus do jego nagłówka; błąd otrzymuje widoczny fokus
+w komunikacie. Nie ma zmian w arkuszu przed akceptacją.
+
+Regresja poprawki: 313 testów backendu. Test przeglądarkowy odtwarza pytanie,
+odpowiedź o ustąpieniu bólu, zmianę daty na 1 grudnia i wyświetlenie gotowej
+propozycji. Używa kontrolowanego modelu i lokalnego backendu; rzeczywistej
+odpowiedzi produkcyjnego modelu nie sprawdzano.
+Przeszło również 29 testów Chromium, w tym pełna kontynuacja pytania i fokus
+na wygenerowanym wyniku po poprawieniu dat.

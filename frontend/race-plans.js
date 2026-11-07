@@ -2,7 +2,7 @@
 (() => {
     const el = name => document.getElementById(`race-${name}`);
     const labels = {preview: 'Do akceptacji', writing: 'Zapis do sprawdzenia', applied: 'Zapisany', rejected: 'Odrzucony', stale: 'Nieaktualny'};
-    let context = null, preview = null, busy = false, epoch = 0, pending = null;
+    let context = null, preview = null, busy = false, epoch = 0, pending = null, clarificationId = null;
     const text = (tag, value) => { const node = document.createElement(tag); node.textContent = value; return node; };
     const status = value => { el('status').textContent = value; };
     async function request(path, options) {
@@ -37,16 +37,17 @@
         el('generate').querySelector('button[type=submit]').textContent = busy ? 'Przetwarzanie…' : 'Zaproponuj mój plan';
         el('accept').textContent = preview?.status === 'writing' ? 'Sprawdź wynik poprzedniego zapisu planu' : 'Akceptuję plan i zapisuję do Google Sheets';
     }
+    const stateLabel = value => value.status === 'preview' && ['clarify','pause'].includes(value.generation_status || value.coaching?.status) ? 'Wymaga odpowiedzi' : labels[value.status] || value.status;
     async function run(fn) {
         if (busy) return;
         const current = epoch;
         busy = true; controls();
-        try { await fn(); } catch (error) { if (current === epoch) status(error.message); }
+        try { await fn(); } catch (error) { if (current === epoch) { status(error.message); el('status').tabIndex = -1; el('status').focus({preventScroll:true}); el('status').scrollIntoView({block:'center'}); } }
         finally { busy = false; controls(); }
     }
     const workout = row => row ? `${row.date} — ${row.title}\nDystans: ${row.planned_distance_km || 'nie określono'} km\nCzas: ${row.planned_duration_min || 'nie określono'} min\n\n${row.description}` : 'Brak treningu.';
     function showPreview(value) {
-        preview = value; el('preview').hidden = false; el('coaching').replaceChildren();
+        preview = value; clarificationId = value.status === 'preview' && ['clarify','pause'].includes(value.coaching?.status) ? value.id : null; el('preview').hidden = false; el('coaching').replaceChildren();
         const campaign = value.long_term;
         if (campaign) {
             el('coaching').append(text('h4',`Droga do ${campaign.goal.name} — ${campaign.goal.date}`));
@@ -67,7 +68,7 @@
             const details = document.createElement('details'); details.append(text('summary', 'Źródła i ograniczenia danych'));
             value.limitations.forEach(item => details.append(text('p', item))); el('coaching').append(details);
         }
-        el('summary').textContent = `${value.start} – ${value.end}: dodane ${value.summary.added}, przebudowane ${value.summary.replaced}, zachowane ${value.summary.kept}. Stan: ${labels[value.status] || value.status}.`;
+        el('summary').textContent = `${value.start} – ${value.end}: dodane ${value.summary.added}, przebudowane ${value.summary.replaced}, zachowane ${value.summary.kept}. Stan: ${stateLabel(value)}.`;
         for (const [name, items] of [['warnings', value.warnings], ['blockers', value.blockers]]) el(name).replaceChildren(...items.map(item => text('li', item)));
         const table = document.createElement('table'), header = document.createElement('tr');
         ['Cykl od', 'Do', 'Etap', 'Propozycja km', 'Plan km'].forEach(name => header.append(text('th', name))); table.append(header);
@@ -91,12 +92,15 @@
         }
         el('weeks').hidden = !(value.cycles?.length || value.weeks?.length);
         controls();
+        el('outcome-title').tabIndex = -1;
+        el('outcome-title').focus({preventScroll:true});
+        el('outcome-title').scrollIntoView({block:'start',behavior:'smooth'});
     }
     async function history() {
         const result = await request(''); el('history').replaceChildren();
         result.items.forEach(item => {
             const button = document.createElement('button'); button.type = 'button';
-            button.textContent = `${item.start} – ${item.end} — ${labels[item.status] || item.status}`;
+            button.textContent = `${item.start} – ${item.end} — ${stateLabel(item)}`;
             button.addEventListener('click', () => run(async () => { showPreview(await request(`/${item.id}`)); status('Otwarta zapisana wersja planu.'); }));
             el('history').append(button);
         });
@@ -115,6 +119,7 @@
             await load();
             const body = {plan_version: context.plan_version, calendar_version: context.calendar_version, athlete_version: context.athlete_version,
                 start: el('start').value, end: el('end').value, replace_existing: el('replace').checked, note: el('note').value};
+            if (clarificationId) body.clarification_id = clarificationId;
             const hash = JSON.stringify(body);
             if (!pending || pending.hash !== hash) pending = {hash, id: crypto.randomUUID()};
             status('Trener analizuje historię i układa cykl 10-dniowy…');
@@ -133,7 +138,7 @@
         if (preview?.status === 'preview') { preview.status = 'stale'; controls(); }
     });
     document.addEventListener('coach-access-closed', () => {
-        epoch++; context = preview = pending = null;
+        epoch++; context = preview = pending = clarificationId = null;
         ['calendar', 'history', 'entries', 'weeks', 'warnings', 'blockers', 'coaching'].forEach(name => el(name).replaceChildren());
         el('preview').hidden = true; ['start', 'end', 'note'].forEach(name => { el(name).value = ''; });
         el('summary').textContent = ''; status('');
