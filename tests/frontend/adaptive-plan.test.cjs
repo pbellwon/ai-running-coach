@@ -442,6 +442,9 @@ test('one click proposes a ten-day plan from history without a preferences form'
     assert.equal(await page.locator('#race-preferences').count(), 0);
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 0);
     assert.match(await page.locator('#race-coaching').textContent(), /Historia i dawna kontuzja/);
+    assert.match(await page.locator('#race-coaching').textContent(), /Droga do/);
+    assert.match(await page.locator('#race-coaching').textContent(), /Baza i tolerancja/);
+    assert.match(await page.locator('#race-coaching').textContent(), /Przygotowanie specyficzne/);
     assert.match(await page.locator('#race-weeks').textContent(), /2026-11-11/);
     assert.match(await page.locator('#race-entries').textContent(), /dzień 10\/10/);
     assert.match(await page.locator('#race-entries').textContent(), /Uwagi trenera: zachowaj/);

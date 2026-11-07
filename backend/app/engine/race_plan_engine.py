@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 import math
 
+from app.engine.long_term_plan import LongTermPlan, LABELS, ROLES
 from app.engine.existing_plan_importer import ExistingPlanImporter
 from app.engine.planned_workout_engine import PlannedWorkoutEngine
 from app.services.coach_errors import ChatError
@@ -59,7 +60,7 @@ def recovery_days(event):
 
 class RacePlanEngine:
     """Apply an evidence-based ten-day microcycle to the calendar, preserving audit data."""
-    def build(self, snapshot, events, strategy, start, end, replace, protected_rows, today, limits):
+    def build(self, snapshot, events, strategy, start, end, replace, protected_rows, today, limits, goal=None):
         if not PLAN_COLUMNS.issubset(snapshot['headers']):
             raise ChatError(422, 'plan_import nie ma wymaganych dotychczasowych kolumn.')
         if start <= today or end < start or (end-start).days > 365 or (start-today).days > 30:
@@ -85,26 +86,19 @@ class RacePlanEngine:
                 distance = sum(number(r['planned_distance_km'] or 0) for _, r in old)
                 if not any(self._type(r) == 'race' for _, r in old) or abs(distance-by_date[d]['distance_km']) > .2:
                     blockers.append(f'{d}: chroniony lub zachowany trening nie odpowiada zawodom. Skoryguj tę jednostkę osobno.')
-        pattern = {d['offset']: d for d in strategy['days']}
+        campaign = LongTermPlan(start,end,strategy,events,limits,goal)
+        manifest = campaign.manifest()
+        warnings.extend(manifest['warnings'])
         anchor = start - timedelta(days=strategy['start_offset'])
-        base_km = sum(d['distance_km'] for d in pattern.values())
         hard_dates = [d for d, old in rows_by_date.items() if d in preserved or d < start or d > end
                       if any(self._type(r) not in ('off', 'easy_run', 'mobility') for _, r in old)] + list(by_date)
         block, cycle_no = anchor, 0
         while block <= end:
             dates = [block + timedelta(days=i) for i in range(10) if start <= block+timedelta(days=i) <= end]
-            factor = min(1.15, 1.03 ** cycle_no) * (.85 if cycle_no % 4 == 3 else 1)
-            phase = 'Cykl indywidualny' if cycle_no % 4 != 3 else 'Cykl lżejszy'
-            for event in events:
-                distance = (date.fromisoformat(event['date']) - block).days
-                if event['priority'] == 'A' and 0 <= distance <= 18:
-                    factor = min(factor, .5 if distance <= 9 else .7)
-                    phase = 'Taper przed startem A'
-                elif event['priority'] == 'B' and 0 <= distance <= 9:
-                    factor = min(factor, .8)
-                    if 'Taper' not in phase:
-                        phase = 'Cykl ze startem B'
-            budget = sum(pattern[(d-anchor).days % 10]['distance_km'] for d in dates) * factor
+            cycle = campaign.cycle(block,cycle_no)
+            pattern = campaign.pattern(cycle)
+            factor, phase = cycle['factor'], cycle['phase']
+            budget = sum(pattern[(d-anchor).days % 10]['distance_km'] * min(factor,campaign.daily_factor(d)) for d in dates)
             fixed = sum(number(r['planned_distance_km'] or 0) for d in dates for _, r in preserved.get(d, []))
             race_km = sum(by_date[d]['distance_km'] for d in dates if d in by_date and d not in preserved)
             open_dates = [d for d in dates if d not in preserved and d not in by_date and not self._recovering(d, events)]
@@ -124,11 +118,14 @@ class RacePlanEngine:
                         entries.append({'row': row_no, 'action': 'keep', 'before': row, 'after': row, 'phase': 'Zachowana jednostka',
                                         'cycle_day': offset+1, 'preservation_reason': preservation_reason})
                     continue
-                unit = pattern[offset]
+                daily_phase = campaign.phase(day)
+                unit = campaign.pattern(dict(cycle,phase_key=daily_phase,role=ROLES[daily_phase]))[offset]
                 reason = unit['reason']
                 kind = unit['kind']
-                km = math.floor(min(unit['distance_km'] * multiplier, limits['max_session_km'],
-                    unit['distance_km'] * limits['max_session_minutes'] / unit['duration_min'] if unit['duration_min'] else 0) * 10) / 10
+                if campaign.phase(day) in ('foundation','taper','recovery') and kind == 'threshold': kind = 'easy'
+                if campaign.phase(day) == 'recovery' and kind == 'long': kind = 'easy'
+                km = math.floor(min(unit['distance_km'] * min(multiplier,campaign.daily_factor(day)), limits['max_session_km'] * cycle['envelope'],
+                    unit['distance_km'] * limits['max_session_minutes'] * cycle['envelope'] / unit['duration_min'] if unit['duration_min'] else 0) * 10) / 10
                 minutes = round(unit['duration_min'] * km / unit['distance_km']) if unit['distance_km'] else 0
                 if day in by_date:
                     event = by_date[day]
@@ -168,8 +165,10 @@ class RacePlanEngine:
                 after.update(date=day.isoformat(), title=title, description=description, planned_distance_km=f'{km:g}',
                              planned_duration_min=str(minutes), priority=before['priority'] if before else ('key' if day in by_date else 'normal'))
                 entries.append({'row': row_no, 'action': 'replace' if before else 'add', 'before': before, 'after': after, 'phase': reason, 'cycle_day': offset+1})
+            cycle_phases = list(dict.fromkeys(campaign.phase(d) for d in dates))
+            cycle_label = phase if len(cycle_phases)==1 else ' → '.join(LABELS[k] for k in cycle_phases)
             cycles.append({'start': max(start, block).isoformat(), 'end': min(end, block+timedelta(days=9)).isoformat(),
-                           'phase': phase, 'budget_km': round(budget, 1), 'planned_km': round(total, 1)})
+                           'phase': cycle_label, 'role':cycle['role'], 'checkpoint':cycle['checkpoint'], 'phase_key':cycle['phase_key'], 'budget_km': round(budget, 1), 'planned_km': round(total, 1)})
             if total > budget + .5:
                 warnings.append(f'Cykl od {max(start, block)}: starty lub zachowane jednostki przekraczają proponowaną objętość. Sprawdź podgląd.')
             block += timedelta(days=10)
@@ -177,7 +176,7 @@ class RacePlanEngine:
         if preserved:
             warnings.append('Zachowane jednostki mogą ograniczać układ cyklu. Sprawdź odstępy i regenerację w podglądzie.')
         return {'entries': entries, 'cycles': cycles, 'weeks': [], 'warnings': warnings, 'blockers': blockers,
-                'races': selected, 'can_accept': not blockers, 'cycle_days': 10}
+                'long_term':manifest, 'races': selected, 'can_accept': not blockers, 'cycle_days': 10}
 
     @staticmethod
     def _protected_description(description):
