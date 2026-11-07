@@ -25,7 +25,7 @@
     function controls() {
         document.querySelectorAll('#race-planning button, #race-planning input, #race-planning textarea').forEach(node => { node.disabled = busy; });
         const changes = Number(preview?.summary?.added || 0) + Number(preview?.summary?.replaced || 0);
-        const writable = preview?.planning_mode === 'personal-10-day' && preview.can_accept && changes > 0;
+        const writable = preview?.planning_mode === 'long-term-10-day-v1' && preview.can_accept && changes > 0;
         el('accept').hidden = !preview || !(preview.status === 'writing' || (preview.status === 'preview' && writable));
         if (preview) {
             const [title, message] = outcome(preview);
@@ -47,6 +47,14 @@
     const workout = row => row ? `${row.date} — ${row.title}\nDystans: ${row.planned_distance_km || 'nie określono'} km\nCzas: ${row.planned_duration_min || 'nie określono'} min\n\n${row.description}` : 'Brak treningu.';
     function showPreview(value) {
         preview = value; el('preview').hidden = false; el('coaching').replaceChildren();
+        const campaign = value.long_term;
+        if (campaign) {
+            el('coaching').append(text('h4',`Droga do ${campaign.goal.name} — ${campaign.goal.date}`));
+            const phases = document.createElement('ol');
+            campaign.phases.forEach(phase => phases.append(text('li',`${phase.start} – ${phase.end}: ${phase.name}. ${phase.role}`)));
+            el('coaching').append(phases);
+            campaign.assumptions.forEach(item => el('coaching').append(text('p',item)));
+        }
         const coaching = value.coaching;
         if (coaching) {
             el('coaching').append(text('h4', 'Dlaczego taki plan?'), text('p', coaching.explanation), text('p', coaching.anchor_note));
@@ -65,7 +73,7 @@
         ['Cykl od', 'Do', 'Etap', 'Propozycja km', 'Plan km'].forEach(name => header.append(text('th', name))); table.append(header);
         (value.cycles || value.weeks || []).forEach(cycle => {
             const row = document.createElement('tr');
-            [cycle.start || cycle.week_start, cycle.end || 'Archiwalny tydzień', cycle.phase, cycle.budget_km, cycle.planned_km].forEach(item => row.append(text('td', item))); table.append(row);
+            [cycle.start || cycle.week_start, cycle.end || 'Archiwalny tydzień', cycle.phase + (cycle.role ? `: ${cycle.role}` : ''), cycle.budget_km, cycle.planned_km].forEach(item => row.append(text('td', item))); table.append(row);
         });
         el('weeks').replaceChildren(table); el('entries').replaceChildren();
         let opened = 0;

@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.exc import IntegrityError
 from app.db.database import SessionLocal
 from app.db.models import RacePlanDraftDB, PlanWriteGateDB, PlanCorrectionDB
-from app.engine.race_plan_engine import RacePlanEngine, parse_calendar
+from app.engine.race_plan_engine import RacePlanEngine, parse_calendar, recovery_days
 from app.integrations.google_sheets_plan_source import GoogleSheetsPlanSource
 from app.services.coach_chat_service import ChatError
 from app.services.plan_correction_service import digest
@@ -40,7 +40,7 @@ class RacePlanService:
         return {'plan_version': digest(snapshot), 'calendar_version': digest(calendar), 'athlete_version': athlete['version'],
                 'races': future, 'cycle_days': 10, 'sources': athlete['sources'], 'limitations': athlete['limitations'],
                 'default_start': start,
-                'default_end': (date.fromisoformat(next_a['date']) + timedelta(days=7)).isoformat() if next_a else None}
+                'default_end': (date.fromisoformat(next_a['date']) + timedelta(days=max(7,recovery_days(next_a)))).isoformat() if next_a else None}
 
     def _selected_goal(self, athlete, events):
         profile = athlete.get('facts', {}).get('profile')
@@ -92,6 +92,7 @@ class RacePlanService:
         events = parse_calendar(calendar)
         selected_goal = self._selected_goal(athlete, events)
         athlete['planning_start'] = request['start']
+        athlete['planning_end'] = request['end']
         start, end = date.fromisoformat(request['start']), date.fromisoformat(request['end'])
         if start <= self.now().date() or end < start or (end-start).days > 365 or (start-self.now().date()).days > 30:
             raise ChatError(422, 'Wybierz przyszły zakres do 366 dni, rozpoczynający się najwyżej 30 dni naprzód.')
@@ -124,7 +125,7 @@ class RacePlanService:
             check()
             if strategy['status'] == 'ready':
                 result = RacePlanEngine().build(snapshot, events, strategy, start, end,
-                    request['replace_existing'], protected, self.now().date(), athlete['limits'])
+                    request['replace_existing'], protected, self.now().date(), athlete['limits'], selected_goal)
             else:
                 result = {'entries': [], 'cycles': [], 'weeks': [], 'warnings': [], 'blockers': strategy['questions'],
                           'races': events, 'can_accept': False, 'cycle_days': 10}
@@ -143,7 +144,7 @@ class RacePlanService:
                 result['blockers'].append('W tym zakresie nie powstały zmiany do zapisania. Jednostki pozostały zachowane; sprawdź podane przy nich powody. To nie jest ocena, że obecny plan jest optymalny.')
                 result['can_accept'] = False
             payload = {**request, **result, 'id': identifier, 'created_at': self.now().isoformat(),
-                       'planning_mode': 'personal-10-day', 'athlete_context': athlete, 'before_snapshot': snapshot, 'after_snapshot': after,
+                       'planning_mode': 'long-term-10-day-v1', 'athlete_context': athlete, 'before_snapshot': snapshot, 'after_snapshot': after,
                        'summary': {'added': sum(e['action'] == 'add' for e in result['entries']),
                                    'replaced': sum(e['action'] == 'replace' for e in result['entries']),
                                    'kept': sum(e['action'] == 'keep' for e in result['entries'])}}
@@ -185,8 +186,8 @@ class RacePlanService:
                 return self._reconcile(db, record)
             if record.status != 'preview':
                 raise ChatError(409, 'Podgląd jest nieaktualny. Przygotuj nowy.')
-            if accept and payload.get('planning_mode') != 'personal-10-day':
-                raise ChatError(409, 'To podgląd ze starego generatora tygodniowego. Przygotuj nową propozycję w cyklu 10-dniowym.')
+            if accept and payload.get('planning_mode') != 'long-term-10-day-v1':
+                raise ChatError(409, 'To podgląd ze starego generatora. Przygotuj nową propozycję w cyklu 10-dniowym.')
             if accept and not payload['can_accept']:
                 raise ChatError(409, 'Plan ma nierozstrzygnięte konflikty. Sprawdź podgląd.')
             if not accept:
