@@ -95,6 +95,8 @@ def reset():
     state["chat_clock"] = 0
     state['clarification_answer_seen'] = False
     state['review_mode'] = 'reduce'
+    state['plan_model_mode'] = 'normal'
+    state['plan_model_calls'] = 0
     correction_sheet.__init__()
     race_sheet.__init__()
     with SessionLocal() as db:
@@ -271,6 +273,7 @@ class FixtureAthleteContext:
 class FixturePlanModel:
     def generate(self, **kwargs):
         import json
+        state['plan_model_calls'] = state.get('plan_model_calls',0)+1
         days = []
         for offset in range(10):
             kind = {0:'easy', 2:'threshold', 4:'easy', 6:'long', 8:'easy'}.get(offset, 'off')
@@ -290,12 +293,21 @@ class FixturePlanModel:
             return json.dumps({'cycle_days':10, 'status':'pause', 'health':'active', 'start_offset':0,
                                'anchor_note':'Najpierw doprecyzujmy aktualny ból.', 'explanation':'Nowe zgłoszenie wymaga wyjaśnienia ograniczeń.',
                                'evidence':['history','athlete_note'], 'questions':['Czy ból występuje także podczas chodzenia?'], 'days':[]})
-        return json.dumps({'cycle_days':10, 'status':'ready', 'health':'historical', 'start_offset':0,
+        value = {'cycle_days':10, 'status':'ready', 'health':'historical', 'start_offset':0,
                            'anchor_note':'Proponuję rozpocząć dzień 1 jutro.', 'explanation':'Historia i dawna kontuzja przemawiają za rozłożeniem bodźców w cyklu 10 dni.',
-                           'evidence':['history','memory:1'], 'questions':[], 'days':days})
+                           'evidence':['history','memory:1'], 'questions':[], 'days':days}
+        if state.get('plan_model_mode')=='invalid' or (state.get('plan_model_mode')=='repair' and state['plan_model_calls']==1):
+            value['days'][0]['distance_km']=90
+        return json.dumps(value)
 
 app.dependency_overrides[race_plans.service] = lambda: RacePlanService(source=race_sheet, now=lambda: datetime(2026, 11, 1, 12),
     athlete_context=FixtureAthleteContext(), coach=PersonalPlanCoach(FixturePlanModel()))
+
+@app.post('/__test__/plan-model-mode/{mode}')
+def plan_model_mode(mode:str):
+    state['plan_model_mode']=mode
+    state['plan_model_calls']=0
+    return {'ok':True}
 
 @app.post('/__test__/race-calendar-change')
 def change_race_calendar():

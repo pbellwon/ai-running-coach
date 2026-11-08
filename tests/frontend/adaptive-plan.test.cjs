@@ -54,7 +54,11 @@ after(async () => {
 
 async function openDashboard(t, interceptDecision) {
     const context = await browser.newContext();
-    t.after(async () => { await context.unrouteAll({behavior: 'wait'}); await context.close(); });
+    t.after(async () => {
+        for (const page of context.pages()) await page.unrouteAll({behavior:'wait'});
+        await context.unrouteAll({behavior: 'wait'});
+        await context.close();
+    });
     // Every request to the production hostname is intercepted; no production
     // request is sent. Adaptive routes run against the actual local API/SQLite.
     await context.route(`${productionAPI}/**`, async route => {
@@ -521,7 +525,7 @@ test('failed new generation cannot leave an earlier acceptance button on screen'
     assert.equal(await page.locator('#race-accept').isVisible(), true);
     await page.route(`${productionAPI}/coach/race-plans/context`, route => route.fulfill({status:503, contentType:'application/json', body:JSON.stringify({detail:'Dane niedostępne.'})}));
     await page.locator('#race-generate button[type=submit]').click();
-    await page.locator('#race-status').filter({hasText:'Dane niedostępne'}).waitFor();
+    await page.locator('#race-error-message').filter({hasText:'Dane niedostępne'}).waitFor();
     assert.equal(await page.locator('#race-preview').isHidden(), true);
     assert.equal(await page.locator('#race-accept').isHidden(), true);
 });
@@ -593,6 +597,7 @@ test('answer to a planning question carries the previous question and reveals th
     await page.locator('#race-generate button[type=submit]').click();
     await page.locator('#race-preview').waitFor({state:'visible'});
     assert.match(await page.locator('#race-summary').textContent(),/Wymaga odpowiedzi/);
+    await page.locator('#race-history').filter({hasText:'Wymaga odpowiedzi'}).waitFor({state:'attached'});
     assert.match(await page.locator('#race-history').textContent(),/Wymaga odpowiedzi/);
     await fetch(`${origin}/__test__/allow-next-planning-attempt`,{method:'POST'});
     await page.locator('#race-extra').evaluate(node => {node.open=true;});
@@ -705,4 +710,36 @@ test('later B race is previewed as a version of the same preparation and saves o
     assert.equal(updated.campaign_id,original.campaign_id);
     assert.notEqual(updated.head_id,original.head_id);
     assert.equal(updated.start,original.start);
+});
+
+test('invalid model response is repaired into a real preview without writing the sheet',async t=>{
+    await fetch(`${origin}/__test__/plan-model-mode/repair`,{method:'POST'});
+    const page=await openDashboard(t); await prepareRacePlan(page);
+    assert.match(await page.locator('#race-outcome-title').textContent(),/Propozycja planu gotowa/);
+    assert.equal(await page.locator('#race-error').isHidden(),true);
+    assert.ok(await page.locator('#race-entries details').count()>10);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
+});
+
+test('failed generation explains why there is no preview, then retry can create the actual plan',async t=>{
+    await fetch(`${origin}/__test__/plan-model-mode/invalid`,{method:'POST'});
+    const page=await openDashboard(t);await unlockChat(page);
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-error').waitFor({state:'visible'});
+    assert.match(await page.locator('#race-error-title').textContent(),/Plan nie został wygenerowany/);
+    assert.match(await page.locator('#race-error-issues').textContent(),/Objętość cyklu przekracza/);
+    assert.match(await page.locator('#race-error-reference').textContent(),/Kod zgłoszenia: [a-f0-9]{12}/);
+    assert.equal(await page.locator('#race-error-title').evaluate(node=>document.activeElement===node),true);
+    assert.equal(await page.locator('#race-preview').isHidden(),true);
+    assert.equal(await page.locator('#race-accept').isHidden(),true);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
+    await fetch(`${origin}/__test__/plan-model-mode/normal`,{method:'POST'});
+    await fetch(`${origin}/__test__/allow-next-planning-attempt`,{method:'POST'});
+    await page.locator('#race-error-retry').click();
+    await page.locator('#race-outcome-title').filter({hasText:'Propozycja planu gotowa'}).waitFor();
+    assert.equal(await page.locator('#race-error').isHidden(),true);
+    assert.ok(await page.locator('#race-entries details').count()>10);
+    await page.locator('#race-accept').click();
+    await page.locator('#race-status').filter({hasText:'Plan zapisany i potwierdzony'}).waitFor();
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,1);
 });

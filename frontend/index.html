@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=coach-1"
+        href="styles.css?v=coach-2"
     >
 </head>
 
@@ -437,6 +437,13 @@
                             <button id="race-load" type="button">Odśwież kalendarz</button>
                             <div id="race-calendar"></div>
                         </details>
+                        <section id="race-error" class="plan-generation-error" hidden aria-labelledby="race-error-title">
+                            <h4 id="race-error-title" tabindex="-1">Plan nie został wygenerowany</h4>
+                            <p id="race-error-message"></p>
+                            <ul id="race-error-issues"></ul>
+                            <p id="race-error-reference" class="muted"></p>
+                            <button id="race-error-retry" type="button">Spróbuj ponownie przygotować plan</button>
+                        </section>
                         <div id="race-preview" hidden>
                             <h4 id="race-outcome-title">Wynik analizy planu</h4>
                             <p id="race-outcome" role="status" aria-live="polite"></p>
@@ -507,9 +514,9 @@
     </main>
 
     <script src="app-navigation.js?v=2"></script>
-    <script src="coach-chat.js?v=7"></script>
+    <script src="coach-chat.js?v=8"></script>
     <script src="athlete-profile.js?v=1"></script>
-    <script src="race-plans.js?v=8"></script>
+    <script src="race-plans.js?v=9"></script>
     <script src="plan-corrections.js?v=1"></script>
     <script src="plan-review.js?v=1"></script>
     <script src="app.js?v=8"></script>

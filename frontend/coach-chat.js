@@ -44,7 +44,11 @@ async function chatRequest(path, options = {}) {
     if (!response.ok) {
         if (response.status === 401) lockCoachChat();
         const data = await response.json().catch(() => ({}));
-        throw new Error(typeof data.detail === 'string' ? data.detail : 'Nie udało się wykonać tej operacji. Spróbuj ponownie.');
+        const detail = data.detail;
+        const error = new Error(typeof detail === 'string' ? detail : typeof detail?.message === 'string' ? detail.message : 'Nie udało się wykonać tej operacji. Spróbuj ponownie.');
+        error.reference = typeof detail?.reference === 'string' ? detail.reference : null;
+        error.issues = Array.isArray(detail?.issues) ? detail.issues.filter(item => typeof item === 'string') : [];
+        throw error;
     }
     return response.json();
 }
