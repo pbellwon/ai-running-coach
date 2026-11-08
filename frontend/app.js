@@ -5,6 +5,9 @@ const API_BASE_URL =
 document.addEventListener(
     "DOMContentLoaded",
     () => {
+        document.querySelectorAll('[data-overview-retry]').forEach(button => {
+            button.addEventListener('click', () => loadTrainingOverview(Number(button.dataset.overviewRetry)));
+        });
         loadDashboard();
     }
 );
@@ -42,13 +45,14 @@ function escapeHtml(value) {
 
 async function loadDashboard() {
     const view = currentAppView();
-    if (view === "week") {
-        await Promise.all([loadWeeklyCoachReview(), loadTrainingOverview()]);
-    } else if (view === "coach") {
+    if (view === "coach") {
         await openCoachChat();
     } else {
         ensureAICoachCard();
-        await Promise.all([loadToday(), loadRecentWorkouts()]);
+        await Promise.all([
+            loadToday(), loadRecentWorkouts(),
+            loadTrainingOverview(7), loadTrainingOverview(28),
+        ]);
     }
 }
 
@@ -837,10 +841,23 @@ function renderAIExplanation(
 }
 
 
-async function loadTrainingOverview() {
+const trainingOverviewRequests = new Map();
+
+async function loadTrainingOverview(days) {
+    const card = document.getElementById(`training-overview-${days}`);
+    const state = document.getElementById(`overview-${days}-state`);
+    const retry = card.querySelector('button');
+    const request = (trainingOverviewRequests.get(days) || 0) + 1;
+    trainingOverviewRequests.set(days, request);
+    card.setAttribute('aria-busy', 'true');
+    state.textContent = 'Wczytywanie podsumowania…';
+    retry.hidden = true;
+    card.querySelectorAll('strong').forEach(node => { node.textContent = '—'; });
+    document.getElementById(`overview-${days}-period`).textContent = '';
     try {
         const response = await fetch(
-            `${API_BASE_URL}/training/overview`
+            `${API_BASE_URL}/training/overview?window_days=${days}`,
+            {cache: 'no-store'}
         );
 
         if (!response.ok) {
@@ -851,16 +868,21 @@ async function loadTrainingOverview() {
 
         const data =
             await response.json();
-
-        renderTrainingOverview(
-            data
-        );
+        if (trainingOverviewRequests.get(days) !== request) return;
+        if (data.window_days !== days || !/^\d{4}-\d{2}-\d{2}$/.test(data.target_date)) {
+            throw new Error('Nieprawidłowy zakres podsumowania.');
+        }
+        renderTrainingOverview(data, days);
+        state.textContent = data.logical_sessions_count === 0
+            ? 'Brak zapisanych treningów w tym okresie.'
+            : 'Wykonane treningi, łącznie z dzisiaj.';
 
     } catch (error) {
-        console.error(
-            "Could not load training overview:",
-            error
-        );
+        if (trainingOverviewRequests.get(days) !== request) return;
+        state.textContent = 'Nie udało się wczytać podsumowania. Spróbuj ponownie.';
+        retry.hidden = false;
+    } finally {
+        if (trainingOverviewRequests.get(days) === request) card.removeAttribute('aria-busy');
     }
 }
 
@@ -1505,50 +1527,25 @@ function renderReasons(
 }
 
 
-function renderTrainingOverview(
-    context
-) {
-    document.getElementById(
-        "overview-running"
-    ).textContent =
-        `${context?.running_distance_km ?? 0} km`;
-
-    document.getElementById(
-        "overview-running-sessions"
-    ).textContent =
-        context?.running_sessions ?? 0;
-
-    document.getElementById(
-        "overview-easy"
-    ).textContent =
-        context?.easy_sessions ?? 0;
-
-    document.getElementById(
-        "overview-quality"
-    ).textContent =
-        context?.quality_sessions ?? 0;
-
-    document.getElementById(
-        "overview-long"
-    ).textContent =
-        context?.long_run_sessions ?? 0;
-
-    document.getElementById(
-        "overview-strength"
-    ).textContent =
-        context?.strength_sessions ?? 0;
-
-    document.getElementById(
-        "overview-cross-training"
-    ).textContent =
-        `${context?.cycling_sessions ?? 0} sessions`;
-
-    document.getElementById(
-        "overview-total-time"
-    ).textContent =
-        formatTrainingTime(
-            context?.total_training_min
-        );
+function renderTrainingOverview(context, days) {
+    const values = {
+        running: `${context.running_distance_km} km`,
+        'running-sessions': context.running_sessions,
+        easy: context.easy_sessions,
+        quality: context.quality_sessions,
+        long: context.long_run_sessions,
+        strength: context.strength_sessions,
+        'cross-training': context.cycling_sessions,
+        'total-time': formatTrainingTime(context.total_training_min),
+    };
+    for (const [key, value] of Object.entries(values)) {
+        document.getElementById(`overview-${days}-${key}`).textContent = value;
+    }
+    const end = new Date(`${context.target_date}T12:00:00Z`);
+    const start = new Date(end);
+    start.setUTCDate(start.getUTCDate() - days + 1);
+    const format = new Intl.DateTimeFormat('pl-PL', {dateStyle: 'medium', timeZone: 'UTC'});
+    document.getElementById(`overview-${days}-period`).textContent = `${format.format(start)} – ${format.format(end)}`;
 }
 
 

@@ -7,11 +7,16 @@ function chatRead(key, fallback) {
     try { return JSON.parse(sessionStorage.getItem(key)) ?? fallback; } catch { return fallback; }
 }
 function chatStatus(text) { document.getElementById('coach-chat-status').textContent = text; }
+function formatCoachDate(isoDate) {
+    return new Intl.DateTimeFormat('pl-PL', {
+        day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+    }).format(new Date(`${isoDate}T12:00:00Z`));
+}
 function renderChatContext() {
     const c = coachChat.context;
     document.getElementById('coach-chat-context').textContent = c.kind === 'week'
-        ? `Rozmawiamy o tygodniu od ${formatWeeklyDate(c.week_start)}.`
-        : c.kind === 'workout' ? `Rozmawiamy o treningu z ${formatWeeklyDate(c.date)}.`
+        ? `Rozmawiamy o tygodniu od ${formatCoachDate(c.week_start)}.`
+        : c.kind === 'workout' ? `Rozmawiamy o treningu z ${formatCoachDate(c.date)}.`
         : 'Kontekst: dzisiejszy trening i aktualne dane.';
     document.getElementById('coach-clear-context').hidden = c.kind === 'today';
 }

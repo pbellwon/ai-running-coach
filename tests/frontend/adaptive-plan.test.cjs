@@ -146,120 +146,101 @@ test('stale proposal prompts refresh instead of recording acceptance', async t =
     assert.equal(await page.locator('#adaptive-plan-accept').isEnabled(), true);
 });
 
-async function waitForWeekly(page) {
-    if (await page.locator("#view-week").isHidden()) await page.locator("[data-view=week]").click();
-    await page.locator('#weekly-coach-review-card[aria-busy="true"]').waitFor({ state: 'hidden' });
-    await page.locator('#weekly-review-content h3').waitFor({ state: 'visible' });
+async function waitForOverviews(page) {
+    for (const days of [7, 28]) {
+        await page.locator(`#training-overview-${days}[aria-busy="true"]`).waitFor({state: 'hidden'});
+        await page.locator(`#overview-${days}-state`).filter({hasText: /Wykonane treningi|Brak zapisanych/}).waitFor();
+    }
 }
 
-test('weekly review shows coaching, recovery, evidence and a full seven-day comparison', async t => {
+test('today ends with rolling 7-day and 28-day summaries instead of a week tab', async t => {
     const page = await openDashboard(t);
-    await waitForWeekly(page);
-    const content = page.locator('#weekly-review-content');
-    await content.getByRole('heading', { name: 'Co dał ten tydzień treningów?' }).waitFor();
-    assert.match(await content.locator('.weekly-review-goal').textContent(), /10 km w 38:30/);
-    assert.match(await content.locator('.weekly-review-goal').textContent(), /nie prognoza wyniku/);
-    assert.match(await content.locator('.weekly-review-load').textContent(), /obciążenie mogło być zbyt duże/);
-    assert.equal(await content.locator('.weekly-review-statistics').getAttribute('open'), null);
-    assert.match(await content.textContent(), /regeneracji pierwszeństwo/);
-    assert.match(await content.textContent(), /Narastające|Silne sygnały zmęczenia/);
-    assert.match(await content.textContent(), /Wnioski na kolejny tydzień/);
-    assert.match(await page.locator('#weekly-review-period').textContent(), /19 października 2026.*25 października 2026/);
-    await content.getByText('Plan i wykonanie dzień po dniu', { exact: true }).click();
-    assert.equal(await content.locator('tbody tr').count(), 7);
-    assert.match(await content.locator('tbody').textContent(), /Easy <img src=x onerror=alert\(1\)>/);
-    assert.equal(await content.locator('img').count(), 0);
-    await content.getByText('Na czym opiera się wniosek?', { exact: true }).first().click();
-    assert.equal(await content.locator('.weekly-review-findings details[open]').count(), 1);
-    assert.match(await content.locator('tbody').textContent(), /Za duży bodziec/);
+    await waitForOverviews(page);
+    assert.deepEqual(await page.locator('.app-navigation a').allTextContents(), ['Dzisiaj', 'Trener']);
+    assert.equal(await page.locator('#view-week, .weekly-shortcut').count(), 0);
+    assert.equal(page.observedRequests.some(url => url.includes('/review/week')), false);
+    assert.match(await page.locator('#overview-7-running').textContent(), /16 km/);
+    assert.equal(await page.locator('#overview-7-running-sessions').textContent(), '2');
+    assert.match(await page.locator('#overview-28-running').textContent(), /32 km/);
+    assert.equal(await page.locator('#overview-28-running-sessions').textContent(), '4');
+    assert.match(await page.locator('#overview-7-period').textContent(), /23.*29.*2026/);
+    assert.match(await page.locator('#overview-28-period').textContent(), /2.*29.*2026/);
+    assert.deepEqual(await page.locator('#dashboard > section').evaluateAll(nodes => nodes.slice(-3).map(node => node.id || node.className)),
+        ['card recent-workouts-card', 'training-overview-7', 'training-overview-28']);
 });
 
-test('weekly navigation handles current week, pending workouts and return to last full week', async t => {
+test('empty rolling summaries show zero with an explicit no-data message', async t => {
     const page = await openDashboard(t);
-    await waitForWeekly(page);
-    await page.locator('#weekly-review-current').click();
-    await waitForWeekly(page);
-    assert.match(await page.locator('#weekly-review-state').textContent(), /Tydzień w toku/);
-    assert.equal(await page.locator('#weekly-review-next').isDisabled(), true);
-    const result = await (await fetch(`${origin}/review/week?week_start=2026-10-26`)).json();
-    assert.equal(result.summary.pending_workouts_count, 1);
-    assert.equal(result.summary.missed_workouts_count, 1);
-    await page.locator('#weekly-review-content .weekly-review-days > summary').click();
-    const friday = page.locator('#weekly-review-content tbody tr').filter({ hasText: '30 października' });
-    assert.match(await friday.textContent(), /W planie/);
-    await page.locator('#weekly-review-previous').click();
-    await waitForWeekly(page);
-    assert.match(await page.locator('#weekly-review-state').textContent(), /Zakończony tydzień/);
-    await page.locator('#weekly-review-previous').click();
-    await waitForWeekly(page);
-    assert.match(await page.locator('#weekly-review-content').textContent(), /Brak zapisanych wykonań/);
-    await page.locator('#weekly-review-latest').click();
-    await waitForWeekly(page);
-    assert.match(await page.locator('#weekly-review-period').textContent(), /19 października/);
-});
-
-test('empty weekly data has an explicit state instead of a reassuring verdict', async t => {
-    await fetch(`${origin}/__test__/weekly-mode/empty`, { method: 'POST' });
-    const page = await openDashboard(t);
-    await waitForWeekly(page);
-    assert.match(await page.locator('#weekly-review-content').textContent(), /Brak zapisanych wykonań/);
-    assert.match(await page.locator('#weekly-review-content h3').textContent(), /więcej danych/);
-    assert.match(await page.locator('#weekly-review-content').textContent(), /Za mało danych do oceny trendu/);
-});
-
-test('weekly failure leaves dashboard usable and retry recovers', async t => {
-    await fetch(`${origin}/__test__/weekly-mode/failure`, { method: 'POST' });
-    const page = await openDashboard(t);
-    await page.locator('[data-view=week]').click();
-    await page.locator('#weekly-review-retry').waitFor({ state: 'visible' });
-    await page.locator('[data-view=today]').click();
-    await page.locator('#dashboard').waitFor({state: 'visible'});
-    assert.equal(await page.locator('#adaptive-plan-accept').isEnabled(), true);
-    await page.locator('[data-view=week]').click();
-    await page.locator('#weekly-review-retry').waitFor({state: 'visible'});
-    assert.match(await page.locator('#weekly-review-state').textContent(), /Nie udało się/);
-    await fetch(`${origin}/__test__/weekly-mode/normal`, { method: 'POST' });
-    await page.locator('#weekly-review-retry').click();
-    await waitForWeekly(page);
-    assert.equal(await page.locator('#weekly-review-retry').isHidden(), true);
-});
-
-test('weekly review fits a mobile viewport', async t => {
-    const page = await openDashboard(t);
-    await page.setViewportSize({ width: 390, height: 844 });
-    await waitForWeekly(page);
-    await page.locator('#weekly-review-content .weekly-review-days > summary').click();
-    const overflow = await page.evaluate(() => [...document.querySelectorAll('body *')]
-        .filter(element => element.getBoundingClientRect().right > window.innerWidth + 1)
-        .slice(0, 15).map(element => ({ tag: element.tagName, id: element.id, className: element.className, right: element.getBoundingClientRect().right })));
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, JSON.stringify(overflow));
-});
-
-test('late weekly response cannot overwrite a newer selection', async t => {
-    const page = await openDashboard(t);
-    await waitForWeekly(page);
-    let release, reached;
-    const blocked = new Promise(resolve => { release = resolve; });
-    const intercepted = new Promise(resolve => { reached = resolve; });
-    await page.route(`${productionAPI}/review/week?week_start=2026-10-12`, async route => {
-        reached();
-        await blocked;
-        const response = await route.fetch({ url: `${origin}/review/week?week_start=2026-10-12` });
-        await route.fulfill({ response });
-    });
-    await page.evaluate(() => {
-        window.olderWeeklyRequest = loadWeeklyCoachReview('2026-10-12');
-    });
-    await intercepted;
-    try {
-        await page.evaluate(() => loadWeeklyCoachReview('2026-10-26'));
-        await waitForWeekly(page);
-    } finally {
-        release();
+    await waitForOverviews(page);
+    await fetch(`${origin}/__test__/weekly-mode/empty`, {method: 'POST'});
+    await page.evaluate(() => Promise.all([loadTrainingOverview(7), loadTrainingOverview(28)]));
+    for (const days of [7, 28]) {
+        assert.match(await page.locator(`#overview-${days}-state`).textContent(), /Brak zapisanych treningów/);
+        assert.equal(await page.locator(`#overview-${days}-running`).textContent(), '0 km');
     }
-    await page.evaluate(() => window.olderWeeklyRequest);
-    assert.match(await page.locator('#weekly-review-period').textContent(), /26 października/);
-    assert.match(await page.locator('#weekly-review-state').textContent(), /Tydzień w toku/);
+});
+
+test('failed 7-day summary stays unavailable while 28 days and today work, then retries', async t => {
+    const page = await openDashboard(t);
+    await waitForOverviews(page);
+    let failed = false;
+    await page.route(`${productionAPI}/training/overview?window_days=7`, async route => {
+        if (!failed) {failed = true; await route.fulfill({status: 502, body: '{}'});}
+        else await route.fulfill({response: await route.fetch({url: `${origin}/training/overview?window_days=7`})});
+    });
+    await page.evaluate(() => loadTrainingOverview(7));
+    await page.locator('[data-overview-retry="7"]').waitFor({state: 'visible'});
+    assert.equal(await page.locator('#overview-7-running').textContent(), '—');
+    assert.equal(await page.locator('#overview-28-running').textContent(), '32 km');
+    assert.equal(await page.locator('#adaptive-plan-accept').isEnabled(), true);
+    await page.locator('[data-overview-retry="7"]').click();
+    await waitForOverviews(page);
+    assert.equal(await page.locator('#overview-7-running').textContent(), '16 km');
+});
+
+test('late rolling summary response cannot overwrite a newer refresh', async t => {
+    const page = await openDashboard(t);
+    await waitForOverviews(page);
+    let release, reached, first = true;
+    const blocked = new Promise(resolve => {release = resolve;});
+    const intercepted = new Promise(resolve => {reached = resolve;});
+    await page.route(`${productionAPI}/training/overview?window_days=7`, async route => {
+        if (first) {
+            first = false; reached(); await blocked;
+            const data = await (await page.request.get(`${origin}/training/overview?window_days=7`)).json();
+            data.running_distance_km = 999;
+            await route.fulfill({json: data});
+        } else await route.fulfill({response: await route.fetch({url: `${origin}/training/overview?window_days=7`})});
+    });
+    await page.evaluate(() => {window.olderOverview = loadTrainingOverview(7);});
+    await intercepted;
+    try {await page.evaluate(() => loadTrainingOverview(7));}
+    finally {release();}
+    await page.evaluate(() => window.olderOverview);
+    assert.equal(await page.locator('#overview-7-running').textContent(), '16 km');
+});
+
+test('rolling summaries fit a mobile viewport and old week links fall back to today', async t => {
+    const page = await openDashboard(t);
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto(`${origin}/index.html#week`);
+    await page.locator('#dashboard').waitFor({state: 'visible'});
+    await waitForOverviews(page);
+    await page.locator('#training-overview-28').scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    assert.equal(await page.locator('#view-today').isVisible(), true);
+    assert.equal(await page.locator('#page-title').textContent(), 'Dzisiaj');
+});
+
+test('a server returning 28 days for a 7-day request is not displayed as 7 days', async t => {
+    const page = await openDashboard(t);
+    await waitForOverviews(page);
+    await page.route(`${productionAPI}/training/overview?window_days=7`, async route => {
+        await route.fulfill({response: await route.fetch({url: `${origin}/training/overview?window_days=28`})});
+    });
+    await page.evaluate(() => loadTrainingOverview(7));
+    assert.match(await page.locator('#overview-7-state').textContent(), /Nie udało się/);
+    assert.equal(await page.locator('#overview-7-running').textContent(), '—');
 });
 
 async function unlockChat(page) {
@@ -269,20 +250,17 @@ async function unlockChat(page) {
     await page.locator('#coach-chat-body').waitFor({state: 'visible'});
 }
 
-test('navigation loads each view on demand and supports browser back', async t => {
+test('navigation loads coach on demand and supports browser back to today', async t => {
     const page = await openDashboard(t);
-    assert.equal(await page.locator('#view-week').isHidden(), true);
-    assert.equal(page.observedRequests.some(url => url.includes('/review/week')), false);
+    await waitForOverviews(page);
     assert.equal(page.observedRequests.some(url => url.includes('/coach/')), false);
-    await page.locator('[data-view=week]').click();
-    await waitForWeekly(page);
-    assert.equal(await page.locator('#view-today').isHidden(), true);
     await page.locator('[data-view=coach]').click();
     await page.locator('#view-coach').waitFor({state: 'visible'});
+    assert.equal(await page.locator('#view-today').isHidden(), true);
     await page.goBack();
-    await page.locator('#view-week').waitFor({state: 'visible'});
-    await page.locator('[data-view=today]').click();
     await page.locator('#dashboard').waitFor({state: 'visible'});
+    assert.equal(await page.locator('#view-coach').isHidden(), true);
+    await waitForOverviews(page);
 });
 
 test('chat rejects wrong code, persists history on reload, and escapes all text', async t => {
@@ -308,10 +286,9 @@ test('chat rejects wrong code, persists history on reload, and escapes all text'
     assert.equal(await page.evaluate(() => sessionStorage.getItem('coach-code')), null);
 });
 
-test('weekly discussion carries selected week without automatically sending a question', async t => {
+test('previous weekly discussion context remains readable without the removed week screen', async t => {
     const page = await openDashboard(t);
-    await waitForWeekly(page);
-    await page.locator('#weekly-ask-coach').click();
+    await page.evaluate(() => startCoachDiscussion({kind: 'week', week_start: '2026-10-19'}, 'Co dał mi ten tydzień?'));
     await page.locator('#view-coach').waitFor({state: 'visible'});
     await unlockChat(page);
     assert.match(await page.locator('#coach-chat-context').textContent(), /19 października/);

@@ -790,130 +790,11 @@ h3 {
     }
 }
 
-.weekly-review-card {
-    min-width: 0;
-    overflow-wrap: anywhere;
-}
-
-.weekly-review-navigation {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 16px 0;
-}
-
-.weekly-review-card button {
-    border: 1px solid #596579;
-    border-radius: 8px;
-    background: #202832;
-    color: #f3f4f6;
-    padding: 9px 12px;
-    cursor: pointer;
-}
-
-.weekly-review-card button:hover:not(:disabled) {
-    background: #303c4c;
-}
-
-.weekly-review-card button:disabled {
-    opacity: 0.5;
-    cursor: default;
-}
-
-.weekly-review-card :is(button, summary):focus-visible {
-    outline: 2px solid #93c5fd;
-    outline-offset: 3px;
-}
-
-.weekly-review-metrics {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 14px;
-    margin: 20px 0;
-}
-
-.weekly-review-metrics dt {
-    font-size: 13px;
-    color: #9ca3af;
-}
-
-.weekly-review-metrics dd {
-    margin: 5px 0 0;
-    font-size: 19px;
-    font-weight: 600;
-}
-
-.weekly-review-card h4 {
-    margin: 22px 0 10px;
-}
-
-.weekly-review-card li {
-    margin-bottom: 8px;
-}
-
-.weekly-review-card summary {
-    cursor: pointer;
-    color: #b8d6ff;
-    margin: 10px 0;
-}
-
-.weekly-review-findings details,
-.weekly-review-limitations {
-    color: #b4bdca;
-    font-size: 14px;
-}
-
-.weekly-review-notice {
-    padding: 12px;
-    border-left: 3px solid #eab308;
-    background: #242116;
-}
-
-.weekly-review-table-scroll {
-    overflow-x: auto;
-}
-
-.weekly-review-days table {
-    width: 100%;
-    min-width: 600px;
-    border-collapse: collapse;
-    font-size: 14px;
-}
-
-.weekly-review-days :is(th, td) {
-    text-align: left;
-    vertical-align: top;
-    padding: 12px 8px;
-    border-bottom: 1px solid #384252;
-}
-
-.weekly-review-days ul {
-    padding-left: 18px;
-}
-
-.weekly-review-days caption {
-    text-align: left;
-    color: #9ca3af;
-    padding: 10px 0;
-}
-
-.weekly-review-story > section {
-    padding: 16px;
-    margin: 14px 0;
-    border: 1px solid #242a33;
-    border-radius: 12px;
-    background: #101318;
-}
-.weekly-review-story h4 { margin-top: 0; }
-.weekly-review-goal-target { font-weight: 600; }
-.weekly-review-statistics { margin: 20px 0; }
-
 [hidden] { display: none !important; }
 .app-navigation { display: flex; gap: 8px; margin: 0 0 22px; }
 .app-navigation a { flex: 1; text-align: center; padding: 12px; border: 1px solid #313946; border-radius: 12px; text-decoration: none; color: #b4bdca; background: #14171c; }
 .app-navigation a[aria-current] { color: #f3f4f6; background: #263346; border-color: #93c5fd; }
 .app-navigation a:focus-visible, .coach-chat-card :is(button, input, textarea, select):focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
-.weekly-shortcut a { color: #b8d6ff; }
 .coach-chat-card button { border: 1px solid #596579; border-radius: 8px; background: #202832; color: #f3f4f6; padding: 10px 14px; cursor: pointer; }
 .coach-chat-card button:disabled { opacity: .55; cursor: wait; }
 .coach-chat-card :is(input, textarea, select) { min-width: 0; max-width: 100%; padding: 10px; border: 1px solid #596579; border-radius: 8px; color: #e5e7eb; background: #101318; }
@@ -965,3 +846,6 @@ h3 {
 #plan-review pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 #plan-review label { display: block; margin: 0.8rem 0; }
 #plan-review select { max-width: 100%; }
+
+.training-overview button { border: 1px solid #596579; border-radius: 8px; background: #202832; color: #f3f4f6; padding: 9px 12px; margin-bottom: 12px; cursor: pointer; }
+.training-overview button:focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }

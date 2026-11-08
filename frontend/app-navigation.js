@@ -1,7 +1,6 @@
 function currentAppView() {
     const hash = location.hash.slice(1);
-    if (hash === 'weekly-coach-review-card') return 'week';
-    return ['today', 'week', 'coach'].includes(hash) ? hash : 'today';
+    return ['today', 'coach'].includes(hash) ? hash : 'today';
 }
 
 function showAppView() {
@@ -13,7 +12,7 @@ function showAppView() {
         if (link.dataset.view === view) link.setAttribute('aria-current', 'page');
         else link.removeAttribute('aria-current');
     });
-    document.getElementById('page-title').textContent = {today: 'Dzisiaj', week: 'Tydzień', coach: 'Trener'}[view];
+    document.getElementById('page-title').textContent = {today: 'Dzisiaj', coach: 'Trener'}[view];
     document.querySelector('.topbar-actions').hidden = view !== 'today';
     document.getElementById('today-date').hidden = view !== 'today';
 }
@@ -21,10 +20,6 @@ function showAppView() {
 document.addEventListener('DOMContentLoaded', () => {
     showAppView();
     initializeCoachChat();
-    try {
-        const shortcut = sessionStorage.getItem('weekly-shortcut');
-        if (shortcut) document.getElementById('weekly-shortcut-summary').textContent = shortcut;
-    } catch {}
     const ask = document.createElement('button');
     ask.type = 'button';
     ask.className = 'coach-request-button';

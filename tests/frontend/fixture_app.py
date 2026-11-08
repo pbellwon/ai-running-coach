@@ -168,8 +168,8 @@ def today():
 
 
 @app.get("/training/overview")
-def overview():
-    return {}
+def overview(window_days: int = 28):
+    return main.training_overview(target_date=date(2026, 10, 29), window_days=window_days)
 
 
 @app.get("/workouts/recent-reviews")
