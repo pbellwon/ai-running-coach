@@ -14,6 +14,7 @@ from app.services.plan_correction_service import digest
 from app.services.personal_plan_context import PersonalPlanContext
 from app.services.personal_plan_coach import PersonalPlanCoach, planning_attempt
 from app.services.recent_execution_review_service import RecentExecutionReviewService
+from app.services.active_plan_service import ensure_active, set_active
 
 
 class RacePlanService:
@@ -181,6 +182,7 @@ class RacePlanService:
                 return self._view(record)
 
     def decide(self, identifier, accept):
+        ensure_active(self.factory)
         with self.factory() as db:
             if not db.get(PlanWriteGateDB, 1):
                 db.add(PlanWriteGateDB(id=1, owner=''))
@@ -203,7 +205,7 @@ class RacePlanService:
                 return self._reconcile(db, record)
             if record.status != 'preview':
                 raise ChatError(409, 'Podgląd jest nieaktualny. Przygotuj nowy.')
-            if accept and payload.get('planning_mode') != 'long-term-10-day-v1':
+            if accept and payload.get('planning_mode') not in ('long-term-10-day-v1','adaptation-10-day-v1'):
                 raise ChatError(409, 'To podgląd ze starego generatora. Przygotuj nową propozycję w cyklu 10-dniowym.')
             if accept and not payload['can_accept']:
                 raise ChatError(409, 'Plan ma nierozstrzygnięte konflikty. Sprawdź podgląd.')
@@ -228,6 +230,13 @@ class RacePlanService:
                 or date.fromisoformat(payload['start']) <= self.now().date()):
             self._finish(identifier, 'stale')
             raise ChatError(409, 'Plan, kalendarz, dane zawodnika lub data są nieaktualne. Przygotuj nowy podgląd.')
+        if payload.get('planning_mode') == 'adaptation-10-day-v1':
+            from app.services.plan_review_service import PlanReviewService
+            try:
+                PlanReviewService(self.source,self.factory,now=self.now,athlete_context=self.athlete_context).validate_patch(payload)
+            except ChatError:
+                self._finish(identifier,'stale')
+                raise
         try:
             self.source.write_generated_plan(snapshot, payload['after_snapshot'])
         except Exception:
@@ -239,8 +248,14 @@ class RacePlanService:
         payload = json.loads(record.payload)
         snapshot = self.source.correction_snapshot()
         if snapshot == payload['after_snapshot']:
+            released = db.query(PlanWriteGateDB).filter_by(id=1, owner=record.id).update({'owner': ''})
+            if not released:
+                db.refresh(record)
+                if record.status == 'applied':
+                    return self._view(record)
+                raise ChatError(409, 'Zapis nie ma już aktywnej blokady. Sprawdź historię planu.')
             record.status = 'applied'
-            db.query(PlanWriteGateDB).filter_by(id=1, owner=record.id).update({'owner': ''})
+            set_active(db,record,payload)
             db.commit()
             return self._view(record)
         raise ChatError(409, 'Wynik zapisu planu jest niepotwierdzony. Sprawdź ponownie tę samą wersję w historii. Kolejne zapisy są zablokowane do rozstrzygnięcia.')

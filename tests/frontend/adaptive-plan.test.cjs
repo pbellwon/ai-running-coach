@@ -622,3 +622,43 @@ test('answer to a planning question carries the previous question and reveals th
     assert.equal(await page.locator('#race-accept').isVisible(),true);
     assert.equal(await page.locator('#race-outcome-title').evaluate(node=>document.activeElement===node),true);
 });
+
+test('review adapts the accepted campaign with visible evidence, preview and explicit save', async t=>{
+    const seeded=await (await fetch(`${origin}/__test__/seed-accepted-review-plan`,{method:'POST'})).json();
+    const page=await openDashboard(t);await unlockChat(page);
+    await page.locator('#review-run').click();
+    await page.locator('#review-result').waitFor({state:'visible'});
+    assert.match(await page.locator('#review-title').textContent(),/zmniejszenia/);
+    assert.match(await page.locator('#review-evidence').textContent(),/too_hard: 2/);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
+    await page.locator('#review-propose button').click();
+    await page.locator('#review-patch').waitFor({state:'visible'});
+    assert.match(await page.locator('#review-changes').textContent(),/Przed/);
+    assert.match(await page.locator('#review-changes').textContent(),/Uwagi: zachowaj/);
+    await page.locator('#review-accept').click();
+    await page.locator('#review-status').filter({hasText:'zapisana i potwierdzona'}).waitFor();
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,1);
+    const current=await (await page.request.get(`${origin}/coach/plan-reviews/current`,{headers:{Authorization:'Bearer fixture-private-chat-code'}})).json();
+    assert.equal(current.campaign_id,seeded.id);
+    assert.notEqual(current.head_id,seeded.id);
+    await page.setViewportSize({width:390,height:844});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+});
+
+test('review with missing accepted plan explains the prerequisite',async t=>{
+    const page=await openDashboard(t);await unlockChat(page);
+    await page.locator('#review-run').click();
+    await page.locator('#review-status').filter({hasText:'Brak zaakceptowanego planu'}).waitFor();
+    assert.equal(await page.locator('#review-result').isHidden(),true);
+});
+
+test('on-target execution supports keeping the plan without inventing a correction',async t=>{
+    await fetch(`${origin}/__test__/seed-accepted-review-plan`,{method:'POST'});
+    await fetch(`${origin}/__test__/review-mode/keep`,{method:'POST'});
+    const page=await openDashboard(t);await unlockChat(page);
+    await page.locator('#review-run').click();
+    await page.locator('#review-result').waitFor({state:'visible'});
+    assert.match(await page.locator('#review-title').textContent(),/Utrzymaj/);
+    assert.equal(await page.locator('#review-propose').isHidden(),true);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
+});

@@ -22,6 +22,9 @@ class RecoverySnapshotService:
     They will later be individualized using longer history.
     """
 
+    def __init__(self, session_factory=None):
+        self.factory = session_factory or SessionLocal
+
     BASELINE_DAYS = 14
     MIN_BASELINE_SAMPLES = 5
 
@@ -183,7 +186,7 @@ class RecoverySnapshotService:
             datetime.min.time(),
         )
 
-        db = SessionLocal()
+        db = self.factory()
 
         try:
             return (
@@ -218,7 +221,7 @@ class RecoverySnapshotService:
             datetime.min.time(),
         )
 
-        db = SessionLocal()
+        db = self.factory()
 
         try:
             return (

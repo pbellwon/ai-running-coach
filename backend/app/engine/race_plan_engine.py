@@ -181,7 +181,7 @@ class RacePlanEngine:
     @staticmethod
     def _protected_description(description):
         final = description.rsplit('\nPaceMind ', 1)[-1]
-        generated = 'Zmiana: plan pod kalendarz startów,' in final or 'Zmiana: plan indywidualny, cykl 10-dniowy,' in final
+        generated = 'Zmiana: plan pod kalendarz startów,' in final or 'Zmiana: plan indywidualny, cykl 10-dniowy,' in final or 'Zmiana: adaptacja istniejącego planu,' in final
         return MARKER in description and not generated
 
     @staticmethod

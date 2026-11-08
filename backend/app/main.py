@@ -1812,3 +1812,7 @@ app.include_router(race_plans_router)
 from app.api.athlete_profile import router as athlete_profile_router
 
 app.include_router(athlete_profile_router)
+
+from app.api.plan_reviews import router as plan_reviews_router
+
+app.include_router(plan_reviews_router)

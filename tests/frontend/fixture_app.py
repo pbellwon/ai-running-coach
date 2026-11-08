@@ -94,9 +94,12 @@ def reset():
     state["weekly_mode"] = "normal"
     state["chat_clock"] = 0
     state['clarification_answer_seen'] = False
+    state['review_mode'] = 'reduce'
     correction_sheet.__init__()
     race_sheet.__init__()
     with SessionLocal() as db:
+        db.query(PlanExecutionReviewDB).delete()
+        db.query(ActivePlanStateDB).delete()
         db.query(AthleteProfileProposalDB).delete()
         db.query(AthleteMemoryDetailsDB).delete()
         db.query(AthleteMemoryDB).delete()
@@ -329,5 +332,51 @@ def next_planning_attempt():
 @app.get('/__test__/clarification-answer-seen')
 def clarification_answer_seen():
     return {'seen':state.get('clarification_answer_seen',False)}
+
+from app.api import plan_reviews
+from app.services.plan_review_service import PlanReviewService
+from app.services.plan_review_evidence import PlanReviewEvidence
+from app.services.plan_correction_service import digest
+from app.db.models import ActivePlanStateDB, PlanExecutionReviewDB
+from app.engine.race_plan_engine import parse_calendar
+
+class FixtureReviewAthlete:
+    def capture(self,today):
+        return {'version':'r'*64,'facts':{'profile':{'goal':parse_calendar(race_sheet.race_calendar_snapshot())[0],'memory':[]}}}
+
+def fixture_review_evidence(*args):
+    status='on_target' if state.get('review_mode')=='keep' else 'too_hard'
+    return {'days':[{'date':day,'status':'completed','planned_workouts':[{'title':'Threshold','planned_distance_km':10,'planned_duration_min':60}],
+        'executed_sessions':[{'workout_type':'threshold','total_distance_km':12,'total_duration_min':70,
+            'execution_review':{'status':status,'confidence':.9,'athlete_feedback':{'perceived_effort':9,'comment':'Duże zmęczenie.'}}}]} for day in ('2026-11-02','2026-11-04')],
+        'recovery':{'available_days':5,'fatigue_signal':'stable' if status=='on_target' else 'accumulating'},
+        'goal_progress':{'fitness_trend':'stable'}}
+
+PlanReviewEvidence.build=lambda self,*args:fixture_review_evidence(*args)
+app.dependency_overrides[plan_reviews.service]=lambda:PlanReviewService(source=race_sheet,now=lambda:datetime(2026,11,8,12),athlete_context=FixtureReviewAthlete())
+
+@app.post('/__test__/seed-accepted-review-plan')
+def seed_accepted_review_plan():
+    import json
+    from uuid import uuid4
+    root=str(uuid4())
+    race_sheet.rows=[{'date':(date(2026,10,26)+timedelta(days=i)).isoformat(),'title':'Threshold','description':'3 x 4 min threshold. Uwagi: zachowaj.',
+        'planned_distance_km':'10','planned_duration_min':'60','priority':'normal','uwagi':'notatka'} for i in range(56)]
+    snapshot=race_sheet.correction_snapshot()
+    goal=parse_calendar(race_sheet.race_calendar_snapshot())[0]
+    payload={'id':root,'start':'2026-10-26','end':'2026-12-20','planning_mode':'long-term-10-day-v1',
+        'after_snapshot':snapshot,'before_snapshot':snapshot,'calendar_version':digest(race_sheet.race_calendar_snapshot()),
+        'long_term':{'goal':goal,'phases':[],'assumptions':[]},'cycles':[{'start':'2026-10-26','end':'2026-11-04','phase':'Rozwój','planned_km':100,'budget_km':100}],
+        'coaching':{'status':'ready','explanation':'Plan','anchor_note':'Cykl','evidence':[],'questions':[]},
+        'entries':[],'summary':{'added':56,'replaced':0,'kept':0},'created_at':'2026-10-25','warnings':[],'blockers':[],'can_accept':True}
+    with SessionLocal() as db:
+        db.add(RacePlanDraftDB(id=root,request_hash='root',payload=json.dumps(payload),status='applied',created_at=datetime(2026,10,25)))
+        db.commit()
+    return {'id':root}
+
+@app.post('/__test__/review-mode/{mode}')
+def review_mode(mode:str):
+    state['review_mode']=mode
+    return {'ok':True}
 
 app.mount("/", StaticFiles(directory=Path(__file__).resolve().parents[2] / "frontend"))

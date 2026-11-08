@@ -961,3 +961,7 @@ h3 {
 #athlete-knowledge input, #athlete-knowledge select, #athlete-knowledge textarea { display: block; width: 100%; box-sizing: border-box; }
 #athlete-knowledge pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 #profile-memory article, #profile-pending button { margin: 0.8rem 0; }
+
+#plan-review pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+#plan-review label { display: block; margin: 0.8rem 0; }
+#plan-review select { max-width: 100%; }
