@@ -91,7 +91,9 @@ class RacePlanEngine:
         warnings.extend(manifest['warnings'])
         anchor = start - timedelta(days=strategy['start_offset'])
         hard_dates = [d for d, old in rows_by_date.items() if d in preserved or d < start or d > end
-                      if any(self._type(r) not in ('off', 'easy_run', 'mobility') for _, r in old)] + list(by_date)
+                      if any(self._type(r) not in ('off', 'easy_run', 'mobility','strength') for _, r in old)] + list(by_date)
+        strength_dates = [d for d,old in rows_by_date.items() if d in preserved or d < start or d > end
+                          if any(self._type(r)=='strength' for _,r in old)]
         block, cycle_no = anchor, 0
         while block <= end:
             dates = [block + timedelta(days=i) for i in range(10) if start <= block+timedelta(days=i) <= end]
@@ -122,34 +124,54 @@ class RacePlanEngine:
                 unit = campaign.pattern(dict(cycle,phase_key=daily_phase,role=ROLES[daily_phase]))[offset]
                 reason = unit['reason']
                 kind = unit['kind']
-                if campaign.phase(day) in ('foundation','taper','recovery') and kind == 'threshold': kind = 'easy'
+                if campaign.phase(day) in ('taper','recovery') and kind == 'threshold': kind = 'easy'
                 if campaign.phase(day) == 'recovery' and kind == 'long': kind = 'easy'
                 km = math.floor(min(unit['distance_km'] * min(multiplier,campaign.daily_factor(day)), limits['max_session_km'] * cycle['envelope'],
                     unit['distance_km'] * limits['max_session_minutes'] * cycle['envelope'] / unit['duration_min'] if unit['duration_min'] else 0) * 10) / 10
                 minutes = round(unit['duration_min'] * km / unit['distance_km']) if unit['distance_km'] else 0
+                threshold_work=0
                 if day in by_date:
                     event = by_date[day]
                     title, km, minutes = f'Zawody: {event["name"]}', event['distance_km'], ''
                     prescription = f'Start {event["priority"]}: {event["name"]}, {km:g} km. Cel zawodnika: {event["target_time"] or "ukończenie"}. {event["notes"]}'
                     reason = f'Kalendarz startów, priorytet {event["priority"]}'
-                elif self._recovering(day, events) or kind == 'off' or minutes < 15:
+                elif self._recovering(day, events) or kind == 'off':
                     title, km, minutes = 'Odpoczynek', 0, 0
                     prescription = 'Odpoczynek. Dzień bez treningu biegowego.'
                     if self._recovering(day, events):
                         reason = 'Regeneracja po starcie'
+                elif kind=='strength':
+                    km=0
+                    if any(abs((day-h).days)<2 for h in hard_dates):
+                        title,minutes='Odpoczynek',0
+                        prescription='Odpoczynek. Trening siłowy pominięty ze względu na odstęp od mocnego biegu lub zawodów.'
+                        reason+=' Siła pominięta: kolizja z mocną jednostką lub startem.'
+                    else:
+                        title='Trening siłowy dla biegacza'
+                        minutes=min(unit['duration_min'],limits.get('max_strength_minutes',45))
+                        prescription=f'Trening siłowy, {minutes} min. '+ '; '.join(unit.get('strength_exercises',[]))+'. Technika kontrolowana, bez prób maksymalnych.'
+                        strength_dates.append(day)
+                elif minutes<15:
+                    title,km,minutes='Odpoczynek',0,0
+                    prescription='Odpoczynek. Objętość jednostki po uwzględnieniu pozostałych obciążeń jest zbyt mała.'
                 else:
                     if kind in ('long', 'threshold') and (any(abs((day-h).days) < 3 for h in hard_dates) or
+                            any(abs((day-h).days)<2 for h in strength_dates) or
                             (kind == 'threshold' and ('Taper' in phase or any(0 <= (r-day).days < 7 for r in by_date)))):
                         kind = 'easy'
                         reason += ' Akcent zastąpiony spokojnym biegiem ze względu na odstęp od innych obciążeń.'
                     title = {'easy': 'Spokojny bieg', 'long': 'Długi spokojny bieg', 'threshold': 'Bieg progowy kontrolowany'}[kind]
                     if kind == 'threshold':
-                        work = unit['repetitions'] * unit['work_min']
                         rest = (unit['repetitions']-1) * unit['recovery_min']
-                        if minutes < 18 + work + rest:
+                        fit=min(unit['work_min'],(minutes-18-rest)//unit['repetitions'])
+                        work=unit['repetitions']*fit
+                        if fit<2:
                             title, kind = 'Spokojny bieg', 'easy'
                         else:
-                            prescription = f'10 min spokojnej rozgrzewki; {unit["repetitions"]} x {unit["work_min"]} min threshold / kontrolowany próg, {unit["recovery_min"]} min truchtu między odcinkami; {minutes-10-work-rest} min schłodzenia. Łącznie około {minutes} min / {km:g} km.'
+                            threshold_work=work
+                            recovery=f', {unit["recovery_min"]} min truchtu między odcinkami' if unit['repetitions']>1 else ''
+                            prescription = f'10 min spokojnej rozgrzewki; {unit["repetitions"]} x {fit} min threshold / kontrolowany próg{recovery}; {minutes-10-work-rest} min schłodzenia. Łącznie około {minutes} min / {km:g} km.'
+                            if fit<unit['work_min']: reason+=' Dawka progu zmniejszona, aby zmieścić pełną rozgrzewkę i schłodzenie w czasie jednostki.'
                     if kind != 'threshold':
                         prescription = f'{title} {km:g} km, około {minutes} min; równa, konwersacyjna intensywność.'
                     if kind in ('long', 'threshold'):
@@ -164,17 +186,26 @@ class RacePlanEngine:
                     raise ChatError(422, f'{day}: opis z historią przekracza limit komórki arkusza.')
                 after.update(date=day.isoformat(), title=title, description=description, planned_distance_km=f'{km:g}',
                              planned_duration_min=str(minutes), priority=before['priority'] if before else ('key' if day in by_date else 'normal'))
-                entries.append({'row': row_no, 'action': 'replace' if before else 'add', 'before': before, 'after': after, 'phase': reason, 'cycle_day': offset+1})
+                entries.append({'row': row_no, 'action': 'replace' if before else 'add', 'before': before, 'after': after, 'phase': reason, 'cycle_day': offset+1,
+                                'threshold_work_min':threshold_work})
             cycle_phases = list(dict.fromkeys(campaign.phase(d) for d in dates))
+            current=[e for e in entries if dates[0].isoformat()<=e['after']['date']<=dates[-1].isoformat()]
             cycle_label = phase if len(cycle_phases)==1 else ' → '.join(LABELS[k] for k in cycle_phases)
             cycles.append({'start': max(start, block).isoformat(), 'end': min(end, block+timedelta(days=9)).isoformat(),
+                           'strength_sessions':sum(self._type(e['after'])=='strength' for e in current),
+                           'threshold_work_min':None if any(e['action']=='keep' and self._type(e['after']) in ('threshold','tempo_run') for e in current) else sum(e['threshold_work_min'] for e in current if e['action']!='keep'),
                            'phase': cycle_label, 'role':cycle['role'], 'checkpoint':cycle['checkpoint'], 'phase_key':cycle['phase_key'], 'budget_km': round(budget, 1), 'planned_km': round(total, 1)})
             if total > budget + .5:
                 warnings.append(f'Cykl od {max(start, block)}: starty lub zachowane jednostki przekraczają proponowaną objętość. Sprawdź podgląd.')
+            if any(d['kind']=='strength' for d in strategy['days']) and not cycles[-1]['strength_sessions'] and all(campaign.phase(d) not in ('taper','recovery') for d in dates):
+                warnings.append(f'Cykl od {max(start, block)}: siła nie zmieściła się po uwzględnieniu startów, chronionych jednostek lub niepełnego cyklu.')
             block += timedelta(days=10)
             cycle_no += 1
         if preserved:
             warnings.append('Zachowane jednostki mogą ograniczać układ cyklu. Sprawdź odstępy i regenerację w podglądzie.')
+        if (any(d['kind']=='strength' for d in strategy['days']) and (campaign.taper_start-start).days>=10
+                and not any(c['strength_sessions'] for c in cycles)):
+            blockers.append('W przygotowaniach zabrakło wszystkich jednostek siłowych po uwzględnieniu kolizji. Sprawdź chronione treningi i kalendarz przed akceptacją.')
         return {'entries': entries, 'cycles': cycles, 'weeks': [], 'warnings': warnings, 'blockers': blockers,
                 'long_term':manifest, 'races': selected, 'can_accept': not blockers, 'cycle_days': 10}
 

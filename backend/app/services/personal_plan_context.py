@@ -4,9 +4,10 @@ from datetime import datetime, timedelta
 import math
 
 from app.db.database import SessionLocal
-from app.db.models import WorkoutDB, AthleteMemoryDB, CoachChatTurnDB, WorkoutFeedbackDB, DailyAthleteStateDB
+from app.db.models import WorkoutDB, AthleteMemoryDB, CoachChatTurnDB, WorkoutFeedbackDB, DailyAthleteStateDB, LapDB
 from app.services.plan_correction_service import digest
 from app.services.athlete_profile_service import AthleteProfileService
+from app.services.plan_training_evidence import PlanTrainingEvidence
 
 
 class PersonalPlanContext:
@@ -32,12 +33,17 @@ class PersonalPlanContext:
             feedback = db.query(WorkoutFeedbackDB).order_by(WorkoutFeedbackDB.updated_at.desc()).limit(120).all()
             wellness = db.query(DailyAthleteStateDB).filter(DailyAthleteStateDB.date >= datetime.combine(today - timedelta(days=27), datetime.min.time()),
                 DailyAthleteStateDB.date < datetime.combine(today + timedelta(days=1), datetime.min.time())).order_by(DailyAthleteStateDB.date).all()
+            files=[w.source_file for w in runs if w.declared_workout_type in ('threshold','tempo','tempo_run')]
+            laps=db.query(LapDB).filter(LapDB.workout_file.in_(files)).order_by(LapDB.id).all() if files else []
             raw = {
+                'quality_laps':[fields(l,['id','workout_file','lap_number','distance_m','elapsed_time_sec','moving_time_sec','avg_hr']) for l in laps],
                 'activities': [fields(w, ['id', 'start_time', 'sport', 'distance_km', 'duration_sec', 'declared_workout_type', 'training_load', 'rpe', 'race', 'avg_hr', 'activity_name', 'description']) for w in runs],
                 'memory': [fields(m, ['id', 'category', 'memory_text', 'source', 'confidence', 'updated_at']) for m in memories],
                 'conversations': [fields(t, ['id', 'created_at', 'message', 'answer']) for t in turns],
                 'feedback': [fields(f, ['id', 'session_id', 'perceived_effort', 'execution_feeling', 'comment', 'updated_at']) for f in feedback],
                 'recovery': [fields(w, ['date', 'hrv', 'resting_hr', 'sleep_sec', 'fatigue', 'soreness', 'ctl', 'atl']) for w in wellness]}
+        training=PlanTrainingEvidence(self.factory).build(runs,feedback)
+        raw['training_evidence']=training
         profile = AthleteProfileService(self.factory).snapshot()
         raw['profile'] = profile
         raw['memory'] = [{**m, 'memory_text': m['text'], 'updated_at': m['confirmed_at'] or m['created_at']} for m in profile['memory']]
@@ -56,12 +62,17 @@ class PersonalPlanContext:
         baseline = round(sum(v['km'] for v in recent.values()) * 10 / 28, 1)
         limits = {'cycle_days': 10, 'max_cycle_km': baseline, 'max_session_km': round(max((v['km'] for v in recent.values()), default=0) * 1.1, 1),
                   'max_session_minutes': round(max((v['minutes'] for v in recent.values()), default=0) * 1.1), 'history_sufficient': enough}
+        limits['observed_threshold_work_min']=training['reference_threshold_work_min']
+        limits['max_strength_minutes']=max(15,min(45,max((s['minutes'] for s in training['strength_sessions']),default=20)))
+        limits['strength_required']=True
         chats = [{**t, 'answer': (t['answer'] or '')[:1000], 'answer_truncated': len(t['answer'] or '') > 1000} for t in raw['conversations']]
         activities = [{**w, 'description': (w['description'] or '')[:1500]} for w in raw['activities'][-30:]]
         facts = {'profile': profile, 'running_days': [{'date': d, **v} for d, v in sorted(daily.items())],
+                 'training_evidence':training,
                  'recent_activities': activities, 'memory': raw['memory'],
                  'conversations': chats, 'feedback': raw['feedback'], 'recovery': raw['recovery']}
         sources = [{'id': 'profile', 'label': 'Potwierdzony cel, cykl i ustalenia zawodnika'}, {'id': 'history', 'label': 'Zarejestrowane treningi: ostatnie 84 dni'}, {'id': 'recovery', 'label': 'Regeneracja: ostatnie 28 dni'}]
+        sources.append({'id':'training_evidence','label':'Rozpoznane odcinki progowe i wykonane jednostki siłowe z ostatnich 84 dni'})
         for key in ('memory', 'conversations', 'feedback'):
             for item in raw[key]:
                 label = (f"Pamięć zawodnika ({item['category']}): {item['memory_text'][:160]}" if key == 'memory' else f"Rozmowa: {item['message'][:120]}" if key == 'conversations' else f"Odczucia po treningu: {(item['comment'] or item['execution_feeling'] or '')[:120]}")
@@ -69,4 +80,4 @@ class PersonalPlanContext:
         return {'version': digest(raw), 'facts': facts, 'limits': limits, 'sources': sources,
                 'limitations': ['Dostęp obejmuje rozmowy zapisane w PaceMind; nie obejmuje innych rozmów w ChatGPT.',
                     'Historia i feedback pokazują reakcje na obciążenia, ale same nie dowodzą przyczynowej skuteczności treningu.',
-                    'Brak wpisu o bólu nie potwierdza braku kontuzji. Stare i sprzeczne zgłoszenia wymagają wyjaśnienia.']}
+                    'Brak wpisu o bólu nie potwierdza braku kontuzji. Stare i sprzeczne zgłoszenia wymagają wyjaśnienia.']+training['limitations']}

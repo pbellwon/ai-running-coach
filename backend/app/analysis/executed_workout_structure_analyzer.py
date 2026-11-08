@@ -7,6 +7,9 @@ from app.db.models import LapDB
 
 class ExecutedWorkoutStructureAnalyzer:
 
+    def __init__(self, session_factory=None):
+        self.session_factory = session_factory
+
     FAST_FINISH_MIN_LEAD_IN_KM = 5.0
     FAST_FINISH_MIN_LAP_DISTANCE_M = 800
     FAST_FINISH_MAX_LAP_DISTANCE_M = 1200
@@ -23,7 +26,7 @@ class ExecutedWorkoutStructureAnalyzer:
         self,
         workout_file: str,
     ) -> dict:
-        db = SessionLocal()
+        db = (self.session_factory or SessionLocal)()
 
         try:
             laps = (

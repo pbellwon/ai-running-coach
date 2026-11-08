@@ -81,10 +81,10 @@
         el('summary').textContent = `${value.start} – ${value.end}: dodane ${value.summary.added}, przebudowane ${value.summary.replaced}, zachowane ${value.summary.kept}. Stan: ${stateLabel(value)}.`;
         for (const [name, items] of [['warnings', value.warnings], ['blockers', value.blockers]]) el(name).replaceChildren(...items.map(item => text('li', item)));
         const table = document.createElement('table'), header = document.createElement('tr');
-        ['Cykl od', 'Do', 'Etap', 'Propozycja km', 'Plan km'].forEach(name => header.append(text('th', name))); table.append(header);
+        ['Cykl od', 'Do', 'Etap', 'Propozycja km', 'Plan km', 'Próg: min pracy', 'Siła: jednostki'].forEach(name => header.append(text('th', name))); table.append(header);
         (value.cycles || value.weeks || []).forEach(cycle => {
             const row = document.createElement('tr');
-            [cycle.start || cycle.week_start, cycle.end || 'Archiwalny tydzień', cycle.phase + (cycle.role ? `: ${cycle.role}` : ''), cycle.budget_km, cycle.planned_km].forEach(item => row.append(text('td', item))); table.append(row);
+            [cycle.start || cycle.week_start, cycle.end || 'Archiwalny tydzień', cycle.phase + (cycle.role ? `: ${cycle.role}` : ''), cycle.budget_km, cycle.planned_km, cycle.threshold_work_min ?? '—', cycle.strength_sessions ?? '—'].forEach(item => row.append(text('td', item))); table.append(row);
         });
         el('weeks').replaceChildren(table); el('entries').replaceChildren();
         let opened = 0;

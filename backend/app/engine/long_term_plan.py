@@ -1,6 +1,7 @@
 """A complete preparation arc anchored to the confirmed A race, in ten-day cycles."""
 from copy import deepcopy
 from datetime import date, timedelta
+import math
 
 LABELS = {'foundation':'Baza i tolerancja obciążeń', 'development':'Rozwój obciążenia',
           'specific':'Przygotowanie specyficzne', 'taper':'Taper przed startem A', 'recovery':'Regeneracja po starcie A'}
@@ -39,6 +40,7 @@ class LongTermPlan:
         phase = self.phase(dates[0])
         elapsed = max(0,(max(self.preparation_start,block)-self.preparation_start).days)
         progress = min(1, elapsed/max(1,(self.taper_start-self.preparation_start).days))
+        quality_progress = min(1,max(0,(max(self.start,block)-self.start).days)/max(1,(self.taper_start-self.start).days))
         envelope = min(1.4, 1.04**number)
         target = {'foundation':.9+progress*.2, 'development':1+progress*.25,
                   'specific':1+progress*.4, 'taper':.65, 'recovery':.5}[phase]
@@ -52,6 +54,8 @@ class LongTermPlan:
         if deload: role += ' Cykl odciążający po dwóch cyklach pracy.'
         return {'phase_key':phase, 'phase':LABELS[phase]+(' · odciążenie' if deload else ''),
                 'role':role,'factor':factor,'envelope':envelope,'deload':deload,
+                'progress':progress,
+                'quality_progress':quality_progress,
                 'checkpoint':'Po wykonaniu oceń odczucia, regenerację i realizację bodźców przed zmianą dalszego planu.'}
 
     def pattern(self, cycle):
@@ -59,23 +63,27 @@ class LongTermPlan:
         phase = cycle['phase_key']
         for unit in pattern.values():
             if unit['kind']=='threshold':
-                if phase in ('foundation','taper','recovery') or cycle['deload']:
+                observed=self.limits.get('observed_threshold_work_min',0)
+                if phase in ('taper','recovery') or cycle['deload'] or (phase=='foundation' and not observed):
                     unit.update(kind='easy',repetitions=0,work_min=0,recovery_min=0)
                 else:
-                    # Doses differ by preparation stage and main distance, never by predicted race pace.
-                    reps = 2 if self.goal['distance_km'] > 10 else (3 if phase=='development' else 4)
-                    work = 4 if phase=='development' else (8 if reps==2 else 4)
-                    rest = 2
-                    dose_cap = unit['repetitions']*unit['work_min']*cycle['envelope']
-                    while reps*work > dose_cap and work>2: work -= 1
-                    while reps*work > dose_cap and reps>2: reps -= 1
-                    while work>2 and 18+reps*work+(reps-1)*rest > unit['duration_min']:
-                        work -= 1
-                    if 18+reps*work+(reps-1)*rest <= unit['duration_min']:
-                        unit.update(repetitions=reps,work_min=work,recovery_min=rest)
+                    # Keep the coach's interval format. A short return-to-running seed
+                    # must not become a permanent ceiling for an experienced athlete.
+                    seed=unit['repetitions']*unit['work_min']
+                    reference=max(seed,observed)
+                    target=reference*{'foundation':.8,'development':1,'specific':1.2}[phase]
+                    ceiling=seed+max(0,reference*1.2-seed)*cycle.get('quality_progress',cycle.get('progress',0))
+                    if not observed: ceiling=min(ceiling,seed*cycle['envelope'])
+                    work=min(40,math.floor(min(target,ceiling)/unit['repetitions']))
+                    if work>=2:
+                        unit['work_min']=work
+                        unit['reason']+=f' Próg: {unit["repetitions"]} x {work} min pracy; dawka z propozycji trenera i rozpoznanej historii, nie z samego czasu docelowego.'
                     else:
                         unit.update(kind='easy',repetitions=0,work_min=0,recovery_min=0)
             if phase=='recovery' and unit['kind']=='long': unit['kind']='easy'
+            if unit['kind']=='strength' and phase in ('taper','recovery'):
+                unit.update(kind='off',distance_km=0,duration_min=0,strength_exercises=[])
+                unit['reason']+=' Siła pominięta w taperze lub regeneracji po starcie A.'
             unit['reason'] += f' {cycle["role"]} Cel: {self.goal["name"]} ({self.goal["date"]}).'
         return pattern
 
@@ -98,6 +106,8 @@ class LongTermPlan:
             else: phases.append({'key':key,'name':LABELS[key],'start':day.isoformat(),'end':day.isoformat(),'role':ROLES[key]})
             day+=timedelta(days=1)
         warnings=[]
+        if not self.limits.get('observed_threshold_work_min'):
+            warnings.append('Brak rozpoznanej dawki pracy progowej z odcinków wykonania. Progresja pozostaje ograniczona propozycją trenera; brak danych o odcinkach nie oznacza braku doświadczenia.')
         if (self.race_day-self.preparation_start).days < self.taper_days+30:
             warnings.append('Krótki okres do startu A ogranicza rozwój. Plan nie zastępuje brakujących przygotowań i nie gwarantuje wyniku.')
         long_distance = max((d['distance_km'] for d in self.strategy['days'] if d['kind']=='long'),default=0)
@@ -112,5 +122,7 @@ class LongTermPlan:
         return {'goal':self.goal,'cycle_days':10,'start':self.preparation_start.isoformat(),'end':self.end.isoformat(),
                 'phases':phases,'warnings':warnings,
                 'assumptions':['Najbliższy cykl opiera się na obserwowanym obciążeniu; dalsza progresja jest propozycją do weryfikacji.',
+                    'Praca progowa zachowuje format dobrany przez trenera i jest ograniczona historią odcinków oraz czasem jednostki; nie ma stałego limitu 2x8 min.',
+                    'Siła ma własne jednostki; kolizje ze startami i taper/regeneracja mogą uzasadniać jej pominięcie.',
                     'Starty B/C wspierają przygotowania do wskazanego A; nie zmieniają celu głównego.',
                     'Dalszy plan podlega przeglądowi wykonań i regeneracji; każda zmiana wymaga podglądu i akceptacji.']}
