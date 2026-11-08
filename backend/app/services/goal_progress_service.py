@@ -23,6 +23,9 @@ class GoalProgressService:
     deterministic analysis to GoalProgressEngine.
     """
 
+    def __init__(self, session_factory=None):
+        self.factory = session_factory or SessionLocal
+
     WINDOW_DAYS = 28
 
     def build(
@@ -111,7 +114,7 @@ class GoalProgressService:
             datetime.min.time(),
         )
 
-        db = SessionLocal()
+        db = self.factory()
 
         try:
             return (

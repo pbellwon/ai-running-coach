@@ -25,7 +25,7 @@
     function controls() {
         document.querySelectorAll('#race-planning button, #race-planning input, #race-planning textarea').forEach(node => { node.disabled = busy; });
         const changes = Number(preview?.summary?.added || 0) + Number(preview?.summary?.replaced || 0);
-        const writable = preview?.planning_mode === 'long-term-10-day-v1' && preview.can_accept && changes > 0;
+        const writable = ['long-term-10-day-v1','adaptation-10-day-v1'].includes(preview?.planning_mode) && preview.can_accept && changes > 0;
         el('accept').hidden = !preview || !(preview.status === 'writing' || (preview.status === 'preview' && writable));
         if (preview) {
             const [title, message] = outcome(preview);
@@ -48,6 +48,7 @@
     const workout = row => row ? `${row.date} — ${row.title}\nDystans: ${row.planned_distance_km || 'nie określono'} km\nCzas: ${row.planned_duration_min || 'nie określono'} min\n\n${row.description}` : 'Brak treningu.';
     function showPreview(value) {
         preview = value; clarificationId = value.status === 'preview' && ['clarify','pause'].includes(value.coaching?.status) ? value.id : null; el('preview').hidden = false; el('coaching').replaceChildren();
+        if (value.adaptation_assessment) el('coaching').append(text('h4','Korekta istniejącego planu'),text('p',value.adaptation_assessment.reason));
         const campaign = value.long_term;
         if (campaign) {
             el('coaching').append(text('h4',`Droga do ${campaign.goal.name} — ${campaign.goal.date}`));

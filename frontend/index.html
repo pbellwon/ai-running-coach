@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=33-1"
+        href="styles.css?v=35-1"
     >
 </head>
 
@@ -497,6 +497,30 @@
                         </div>
                         <details><summary>Historia wersji planu</summary><div id="race-history"></div></details>
                     </section>
+                    <section id="plan-review" class="card">
+                        <h3>Przegląd wykonania i korekta dalszego planu</h3>
+                        <p>Oceń ostatni cykl na tle zaakceptowanego planu. Korekta zachowa cel A i historię tej samej drogi przygotowań.</p>
+                        <button id="review-run" type="button">Oceń wykonanie i dalszy plan</button>
+                        <p id="review-status" role="status" aria-live="polite"></p>
+                        <div id="review-result" hidden>
+                            <h4 id="review-title" tabindex="-1"></h4>
+                            <p id="review-period"></p><p id="review-reason"></p>
+                            <ul id="review-evidence"></ul><ul id="review-limitations"></ul>
+                            <details><summary>Porównanie jednostek i trendy</summary><div id="review-days"></div><pre id="review-trends"></pre></details>
+                            <form id="review-propose" hidden>
+                                <label>Zakres korekty <select id="review-scope"><option value="unit">Najbliższa jednostka</option><option value="cycle" selected>Najbliższe 10 dni</option><option value="block">Blok do 30 dni</option></select></label>
+                                <button type="submit">Przygotuj korektę przed / po</button>
+                            </form>
+                        </div>
+                        <div id="review-patch" hidden>
+                            <h4>Propozycja korekty istniejącego planu</h4>
+                            <p id="review-patch-summary"></p><ul id="review-skipped"></ul><div id="review-changes"></div>
+                            <button id="review-accept" type="button">Akceptuję korektę i zapisuję do Google Sheets</button>
+                            <button id="review-reject" type="button">Odrzuć korektę</button>
+                        </div>
+                        <details><summary>Historia przeglądów</summary><button id="review-history-load" type="button">Wczytaj historię przeglądów</button><div id="review-history"></div></details>
+                        <p>Wersje zaakceptowanych korekt są także w historii planów powyżej.</p>
+                    </section>
                     <section id="plan-corrections" class="card">
                         <h3>Korekta istniejącego treningu</h3>
                         <p>Wczytaj plan, przygotuj konkretną zmianę i sprawdź podgląd. Zapis nastąpi dopiero po Twojej akceptacji.</p>
@@ -552,10 +576,11 @@
     </main>
 
     <script src="app-navigation.js?v=1"></script>
-    <script src="coach-chat.js?v=4"></script>
+    <script src="coach-chat.js?v=5"></script>
     <script src="athlete-profile.js?v=1"></script>
-    <script src="race-plans.js?v=6"></script>
+    <script src="race-plans.js?v=7"></script>
     <script src="plan-corrections.js?v=1"></script>
+    <script src="plan-review.js?v=1"></script>
     <script src="weekly-review.js?v=3"></script>
     <script src="app.js?v=7"></script>
 </body>

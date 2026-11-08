@@ -406,3 +406,19 @@ class AthleteProfileProposalDB(Base):
     created_at = Column(DateTime, nullable=False)
     decided_at = Column(DateTime)
     result_json = Column(Text)
+
+
+class ActivePlanStateDB(Base):
+    __tablename__ = 'active_plan_state'
+    id = Column(Integer, primary_key=True)
+    head_id = Column(String(36), ForeignKey('race_plan_drafts.id'))
+    campaign_id = Column(String(36), ForeignKey('race_plan_drafts.id'))
+    revision = Column(Integer, nullable=False, default=0)
+
+
+class PlanExecutionReviewDB(Base):
+    __tablename__ = 'plan_execution_reviews'
+    id = Column(String(36), primary_key=True)
+    request_hash = Column(String(64), nullable=False)
+    payload = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False)
