@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=35-1"
+        href="styles.css?v=35-2"
     >
 </head>
 
@@ -56,7 +56,6 @@
 
         <nav class="app-navigation" aria-label="Główna nawigacja">
             <a href="#today" data-view="today" aria-current="page">Dzisiaj</a>
-            <a href="#week" data-view="week">Tydzień</a>
             <a href="#coach" data-view="coach">Trener</a>
         </nav>
         <div id="view-today" data-app-view="today">
@@ -267,11 +266,6 @@
                 </ul>
             </section>
 
-            <section class="card compact-card weekly-shortcut">
-                <p class="section-label">TWÓJ TYDZIEŃ</p>
-                <p id="weekly-shortcut-summary">Co wniósł ostatni tydzień i na co zwrócić uwagę?</p>
-                <a href="#week">Zobacz przegląd tygodnia →</a>
-            </section>
             <section class="card recent-workouts-card">
                 <div class="recent-workouts-heading">
                     <div>
@@ -299,114 +293,43 @@
                 </div>
             </section>
 
-        </div>
-        </div>
-        <div id="view-week" data-app-view="week" class="dashboard" hidden>
-            <section id="weekly-coach-review-card" class="card weekly-review-card" aria-labelledby="weekly-review-title">
-                <p class="section-label">WEEKLY COACH REVIEW</p>
-                <h2 id="weekly-review-title">Tygodniowy przegląd trenera</h2>
-                <p class="muted">Plan, wykonanie i regeneracja — wnioski na kolejny tydzień.</p>
-                <nav class="weekly-review-navigation" aria-label="Wybór tygodnia">
-                    <button id="weekly-review-previous" type="button">← Poprzedni</button>
-                    <button id="weekly-review-next" type="button">Następny →</button>
-                    <button id="weekly-review-current" type="button">Bieżący tydzień</button>
-                    <button id="weekly-review-latest" type="button">Ostatni pełny tydzień</button>
-                </nav>
-                <p id="weekly-review-period" class="muted"></p>
-                <p id="weekly-review-state" role="status" aria-live="polite">Wczytywanie przeglądu…</p>
-                <button id="weekly-review-retry" type="button" class="hidden">Spróbuj ponownie</button>
-                <div id="weekly-review-content"></div>
-                <button id="weekly-ask-coach" type="button" disabled>Porozmawiaj o tym tygodniu</button>
-            </section>
 
-            <section class="card compact-card">
-                <p class="section-label">
-                    28-DAY TRAINING OVERVIEW
-                </p>
-
+            <section id="training-overview-7" class="card compact-card training-overview" aria-labelledby="overview-7-title">
+                <p class="section-label">PODSUMOWANIE TRENINGÓW</p>
+                <h2 id="overview-7-title">Ostatnie 7 dni</h2>
+                <p id="overview-7-period" class="muted"></p>
+                <p id="overview-7-state" class="muted" role="status" aria-live="polite">Wczytywanie podsumowania…</p>
+                <button type="button" data-overview-retry="7" hidden>Spróbuj ponownie</button>
                 <div class="context-grid">
-                    <div>
-                        <span>
-                            Running
-                        </span>
-
-                        <strong id="overview-running">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Running sessions
-                        </span>
-
-                        <strong id="overview-running-sessions">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Easy
-                        </span>
-
-                        <strong id="overview-easy">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Quality
-                        </span>
-
-                        <strong id="overview-quality">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Long runs
-                        </span>
-
-                        <strong id="overview-long">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Strength
-                        </span>
-
-                        <strong id="overview-strength">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Cross-training
-                        </span>
-
-                        <strong id="overview-cross-training">
-                            —
-                        </strong>
-                    </div>
-
-                    <div>
-                        <span>
-                            Total training time
-                        </span>
-
-                        <strong id="overview-total-time">
-                            —
-                        </strong>
-                    </div>
+                    <div><span>Bieganie</span><strong id="overview-7-running">—</strong></div>
+                    <div><span>Treningi biegowe</span><strong id="overview-7-running-sessions">—</strong></div>
+                    <div><span>Spokojne biegi</span><strong id="overview-7-easy">—</strong></div>
+                    <div><span>Akcenty</span><strong id="overview-7-quality">—</strong></div>
+                    <div><span>Długie biegi</span><strong id="overview-7-long">—</strong></div>
+                    <div><span>Siła</span><strong id="overview-7-strength">—</strong></div>
+                    <div><span>Trening uzupełniający</span><strong id="overview-7-cross-training">—</strong></div>
+                    <div><span>Łączny czas treningów</span><strong id="overview-7-total-time">—</strong></div>
                 </div>
             </section>
 
+            <section id="training-overview-28" class="card compact-card training-overview" aria-labelledby="overview-28-title">
+                <p class="section-label">PODSUMOWANIE TRENINGÓW</p>
+                <h2 id="overview-28-title">Ostatnie 28 dni</h2>
+                <p id="overview-28-period" class="muted"></p>
+                <p id="overview-28-state" class="muted" role="status" aria-live="polite">Wczytywanie podsumowania…</p>
+                <button type="button" data-overview-retry="28" hidden>Spróbuj ponownie</button>
+                <div class="context-grid">
+                    <div><span>Bieganie</span><strong id="overview-28-running">—</strong></div>
+                    <div><span>Treningi biegowe</span><strong id="overview-28-running-sessions">—</strong></div>
+                    <div><span>Spokojne biegi</span><strong id="overview-28-easy">—</strong></div>
+                    <div><span>Akcenty</span><strong id="overview-28-quality">—</strong></div>
+                    <div><span>Długie biegi</span><strong id="overview-28-long">—</strong></div>
+                    <div><span>Siła</span><strong id="overview-28-strength">—</strong></div>
+                    <div><span>Trening uzupełniający</span><strong id="overview-28-cross-training">—</strong></div>
+                    <div><span>Łączny czas treningów</span><strong id="overview-28-total-time">—</strong></div>
+                </div>
+            </section>
+        </div>
         </div>
         <div id="view-coach" data-app-view="coach" hidden>
             <section class="card coach-chat-card" aria-labelledby="coach-chat-title">
@@ -575,13 +498,12 @@
         </div>
     </main>
 
-    <script src="app-navigation.js?v=1"></script>
-    <script src="coach-chat.js?v=5"></script>
+    <script src="app-navigation.js?v=2"></script>
+    <script src="coach-chat.js?v=6"></script>
     <script src="athlete-profile.js?v=1"></script>
     <script src="race-plans.js?v=7"></script>
     <script src="plan-corrections.js?v=1"></script>
     <script src="plan-review.js?v=1"></script>
-    <script src="weekly-review.js?v=3"></script>
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
 </body>
 </html>

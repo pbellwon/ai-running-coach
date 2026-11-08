@@ -1,4 +1,5 @@
 import os
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -1253,18 +1254,21 @@ def training_context_test(
 
 @app.get("/training/overview")
 def training_overview(
-    target_date: str | None = None,
+    target_date: date | None = None,
+    window_days: int = 28,
 ):
+    if window_days not in (7, 28):
+        raise HTTPException(status_code=422, detail="window_days must be 7 or 28.")
     resolved_date = (
         target_date
-        or date.today().isoformat()
+        or datetime.now(ZoneInfo("Europe/Warsaw")).date()
     )
 
     context = (
         TrainingContextService()
         .build(
             target_date=resolved_date,
-            window_days=28,
+            window_days=window_days,
         )
     )
 
