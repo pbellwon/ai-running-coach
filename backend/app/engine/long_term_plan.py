@@ -12,16 +12,17 @@ ROLES = {'foundation':'Zbudować powtarzalność i tolerancję bez zwiększania 
 
 
 class LongTermPlan:
-    def __init__(self, start, end, strategy, events, limits, goal=None):
+    def __init__(self, start, end, strategy, events, limits, goal=None, preparation_start=None):
         self.start, self.end, self.strategy, self.limits = start, end, strategy, limits
+        self.preparation_start = preparation_start or start
         self.goal = goal or next(e for e in events if e['priority']=='A' and start.isoformat() <= e['date'] <= end.isoformat())
         self.race_day = date.fromisoformat(self.goal['date'])
         self.anchor = start-timedelta(days=strategy['start_offset'])
         self.taper_days = 21 if self.goal['distance_km'] > 21.1 else 14 if self.goal['distance_km'] > 10 else 10
-        self.taper_start = max(start, self.race_day-timedelta(days=self.taper_days))
-        available = (self.taper_start-start).days
-        self.base_end = start+timedelta(days=available//3)
-        self.specific_start = start+timedelta(days=available*2//3)
+        self.taper_start = max(self.preparation_start, self.race_day-timedelta(days=self.taper_days))
+        available = (self.taper_start-self.preparation_start).days
+        self.base_end = self.preparation_start+timedelta(days=available//3)
+        self.specific_start = self.preparation_start+timedelta(days=available*2//3)
         self.last_peak = None
         self.events = [e for e in events if start.isoformat() <= e['date'] <= end.isoformat()]
 
@@ -36,8 +37,8 @@ class LongTermPlan:
         dates = [block+timedelta(days=i) for i in range(10) if self.start <= block+timedelta(days=i) <= self.end]
         # A mixed cycle adopts the later preparation stage; daily taper/recovery still override it.
         phase = self.phase(dates[0])
-        elapsed = max(0,(max(self.start,block)-self.start).days)
-        progress = min(1, elapsed/max(1,(self.taper_start-self.start).days))
+        elapsed = max(0,(max(self.preparation_start,block)-self.preparation_start).days)
+        progress = min(1, elapsed/max(1,(self.taper_start-self.preparation_start).days))
         envelope = min(1.4, 1.04**number)
         target = {'foundation':.9+progress*.2, 'development':1+progress*.25,
                   'specific':1+progress*.4, 'taper':.65, 'recovery':.5}[phase]
@@ -90,14 +91,14 @@ class LongTermPlan:
 
     def manifest(self):
         phases=[]
-        day=self.start
+        day=self.preparation_start
         while day<=self.end:
             key=self.phase(day)
             if phases and phases[-1]['key']==key: phases[-1]['end']=day.isoformat()
             else: phases.append({'key':key,'name':LABELS[key],'start':day.isoformat(),'end':day.isoformat(),'role':ROLES[key]})
             day+=timedelta(days=1)
         warnings=[]
-        if (self.race_day-self.start).days < self.taper_days+30:
+        if (self.race_day-self.preparation_start).days < self.taper_days+30:
             warnings.append('Krótki okres do startu A ogranicza rozwój. Plan nie zastępuje brakujących przygotowań i nie gwarantuje wyniku.')
         long_distance = max((d['distance_km'] for d in self.strategy['days'] if d['kind']=='long'),default=0)
         if self.goal['distance_km'] > 10 and long_distance*1.4 < self.goal['distance_km']*.5:
@@ -108,8 +109,8 @@ class LongTermPlan:
         for a,b in zip(self.events,self.events[1:]):
             if (date.fromisoformat(b['date'])-date.fromisoformat(a['date'])).days < 7:
                 warnings.append(f'Bliskie starty: {a["name"]} i {b["name"]}. Wymagają ostrożnej oceny regeneracji.')
-        return {'goal':self.goal,'cycle_days':10,'start':self.start.isoformat(),'end':self.end.isoformat(),
+        return {'goal':self.goal,'cycle_days':10,'start':self.preparation_start.isoformat(),'end':self.end.isoformat(),
                 'phases':phases,'warnings':warnings,
                 'assumptions':['Najbliższy cykl opiera się na obserwowanym obciążeniu; dalsza progresja jest propozycją do weryfikacji.',
                     'Starty B/C wspierają przygotowania do wskazanego A; nie zmieniają celu głównego.',
-                    'Przegląd cyklu nie uruchamia samoczynnie nowego planu. Adaptacja po wykonaniu należy do kolejnego sprintu.']}
+                    'Dalszy plan podlega przeglądowi wykonań i regeneracji; każda zmiana wymaga podglądu i akceptacji.']}

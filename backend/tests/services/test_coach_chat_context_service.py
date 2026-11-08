@@ -69,6 +69,18 @@ def test_specific_workout_is_looked_up_by_id_and_date():
     assert result['sources'][-1]['session_id'] == 'session-12'
 
 
+def test_archive_and_time_to_goal_are_available_even_when_daily_context_fails():
+    base = SimpleNamespace(current_goal_service=CurrentGoalService(), build=lambda day: (_ for _ in ()).throw(ValueError('missing wellness')))
+    service = context(base=base)
+    service.archive = SimpleNamespace(build=lambda day: {'coverage_start':'2020-01-01', 'months':[],
+        'limitations':['Dawne rekordy nie potwierdzają aktualnej formy.']})
+    result = service.build({'kind':'today'})
+    assert result['facts']['training_archive']['coverage_start'] == '2020-01-01'
+    assert result['facts']['days_to_goal'] == 11
+    assert 'athlete' not in result['facts']
+    assert 'Dawne rekordy nie potwierdzają aktualnej formy.' in result['limitations']
+
+
 def test_context_includes_real_weekly_engine_output_from_database(monkeypatch):
     from datetime import datetime
     from sqlalchemy import create_engine

@@ -849,3 +849,13 @@ h3 {
 
 .training-overview button { border: 1px solid #596579; border-radius: 8px; background: #202832; color: #f3f4f6; padding: 9px 12px; margin-bottom: 12px; cursor: pointer; }
 .training-overview button:focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
+
+#coach-conversation { margin-bottom: 28px; }
+#race-planning > h3, #coach-conversation > h3 { font-size: 22px; }
+#race-generate { display: grid; gap: 10px; }
+#race-generate > :is(input, select) { width: 100%; }
+#race-generate > button { justify-self: start; }
+#race-goal-help { margin: 0; }
+#race-extra textarea { width: 100%; }
+.coach-plan-tools { padding: 16px 0; border-top: 1px solid #313946; }
+.coach-plan-tools > summary { cursor: pointer; color: #b8d6ff; }

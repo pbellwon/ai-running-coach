@@ -345,6 +345,7 @@ test('chat blocks duplicate sends while waiting and starts a separate conversati
     } finally {release();}
     await page.locator('#coach-chat-status').filter({hasText: 'Odpowiedź zapisana'}).waitFor();
     const previousId = await page.evaluate(() => coachChat.id);
+    await page.locator('#coach-conversation-history > summary').click();
     await page.locator('#coach-new-conversation').click();
     assert.equal(await page.locator('.coach-chat-message').count(), 0);
     await page.locator('#coach-conversation-select').selectOption(previousId);
@@ -359,6 +360,7 @@ test('coach direct link and navigation fit a mobile viewport', async t => {
     await page.locator('#coach-chat-body').waitFor({state: 'visible'});
     assert.equal(await page.locator('#view-today').isHidden(), true);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await page.locator('#coach-conversation-history > summary').click();
     assert.ok((await page.locator('#coach-conversation-select').boundingBox()).width >= 200);
     const bounds = await page.locator('.app-navigation').boundingBox();
     assert.ok(bounds.y + bounds.height <= 845);
@@ -382,6 +384,7 @@ test('workout discussion carries the selected logical session and date', async t
 test('correction preview preserves notes, requires acceptance and survives reload', async t => {
     const page = await openDashboard(t);
     await unlockChat(page);
+    await page.locator('#plan-corrections > summary').click();
     await page.locator('#corrections-load').click();
     await page.locator('#corrections-form').waitFor({state: 'visible'});
     await page.locator('#corrections-kind').selectOption('easy');
@@ -398,6 +401,7 @@ test('correction preview preserves notes, requires acceptance and survives reloa
     assert.equal(await page.locator('#corrections-accept').isDisabled(), true);
     await page.reload();
     await page.locator('#coach-chat-body').waitFor({state: 'visible'});
+    await page.locator('#plan-corrections > summary').click();
     await page.locator('#corrections-load').click();
     await page.locator('#corrections-status').filter({hasText: 'Aktualny plan'}).waitFor();
     assert.match(await page.locator('#corrections-history').textContent(), /applied/);
@@ -434,7 +438,7 @@ test('one click proposes a ten-day plan from history without a preferences form'
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count, 1);
     await page.reload();
     await page.locator('#coach-chat-body').waitFor({state:'visible'});
-    await page.getByText('Zakres planu i dane źródłowe', {exact:true}).click();
+    await page.getByText('Kalendarz i starty po drodze', {exact:true}).click();
     await page.locator('#race-load').click();
     await page.getByText('Historia wersji planu', {exact:true}).click();
     await page.locator('#race-history button').first().click();
@@ -478,6 +482,7 @@ test('lost full plan save response retries the same immutable version without du
 test('new injury information produces a focused question and blocks plan acceptance', async t => {
     const page = await openDashboard(t);
     await unlockChat(page);
+    await page.locator('#race-extra').evaluate(node => {node.open=true;});
     await page.locator('#race-note').fill('Aktualny ból Achillesa po biegu.');
     await page.locator('#race-generate button[type=submit]').click();
     await page.locator('#race-preview').waitFor({state:'visible'});
@@ -522,6 +527,7 @@ test('failed new generation cannot leave an earlier acceptance button on screen'
 });
 
 test('primary goal and cycle require a review, persist and restore on reload', async t => {
+    await fetch(`${origin}/__test__/legacy-goal`, {method:'POST'});
     const page = await openDashboard(t);
     await unlockChat(page);
     await page.getByText('Co PaceMind o mnie wie', {exact:true}).click();
@@ -582,14 +588,15 @@ test('chat proposes memory but only athlete confirmation saves it; correction ke
 test('answer to a planning question carries the previous question and reveals the generated plan', async t => {
     const page=await openDashboard(t);
     await unlockChat(page);
+    await page.locator('#race-extra').evaluate(node => {node.open=true;});
     await page.locator('#race-note').fill('Potrzebne pytanie testowe');
     await page.locator('#race-generate button[type=submit]').click();
     await page.locator('#race-preview').waitFor({state:'visible'});
     assert.match(await page.locator('#race-summary').textContent(),/Wymaga odpowiedzi/);
     assert.match(await page.locator('#race-history').textContent(),/Wymaga odpowiedzi/);
     await fetch(`${origin}/__test__/allow-next-planning-attempt`,{method:'POST'});
+    await page.locator('#race-extra').evaluate(node => {node.open=true;});
     await page.locator('#race-note').fill('Tak, od 1 grudnia. Ból ustąpił.');
-    await page.getByText('Zakres planu i dane źródłowe',{exact:true}).click();
     await page.locator('#race-start').fill('2026-12-01');
     await page.locator('#race-generate button[type=submit]').click();
     await page.locator('#race-outcome-title').filter({hasText:'Propozycja planu gotowa'}).waitFor();
@@ -603,6 +610,7 @@ test('answer to a planning question carries the previous question and reveals th
 test('review adapts the accepted campaign with visible evidence, preview and explicit save', async t=>{
     const seeded=await (await fetch(`${origin}/__test__/seed-accepted-review-plan`,{method:'POST'})).json();
     const page=await openDashboard(t);await unlockChat(page);
+    await page.locator('#plan-review > summary').click();
     await page.locator('#review-run').click();
     await page.locator('#review-result').waitFor({state:'visible'});
     assert.match(await page.locator('#review-title').textContent(),/zmniejszenia/);
@@ -624,6 +632,7 @@ test('review adapts the accepted campaign with visible evidence, preview and exp
 
 test('review with missing accepted plan explains the prerequisite',async t=>{
     const page=await openDashboard(t);await unlockChat(page);
+    await page.locator('#plan-review > summary').click();
     await page.locator('#review-run').click();
     await page.locator('#review-status').filter({hasText:'Brak zaakceptowanego planu'}).waitFor();
     assert.equal(await page.locator('#review-result').isHidden(),true);
@@ -633,9 +642,67 @@ test('on-target execution supports keeping the plan without inventing a correcti
     await fetch(`${origin}/__test__/seed-accepted-review-plan`,{method:'POST'});
     await fetch(`${origin}/__test__/review-mode/keep`,{method:'POST'});
     const page=await openDashboard(t);await unlockChat(page);
+    await page.locator('#plan-review > summary').click();
     await page.locator('#review-run').click();
     await page.locator('#review-result').waitFor({state:'visible'});
     assert.match(await page.locator('#review-title').textContent(),/Utrzymaj/);
     assert.equal(await page.locator('#review-propose').isHidden(),true);
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
+});
+
+test('coach starts with chat and a simple planner while optional tools stay collapsed', async t=>{
+    const page=await openDashboard(t); await unlockChat(page);
+    await page.locator('#race-generate button[type=submit]').waitFor({state:'visible'});
+    assert.deepEqual(await page.locator('#coach-chat-body > section').evaluateAll(nodes=>nodes.map(n=>n.id)),['coach-conversation','race-planning']);
+    for (const id of ['athlete-knowledge','plan-review','plan-corrections']) assert.equal(await page.locator(`#${id}`).getAttribute('open'),null);
+    assert.equal(await page.locator('#race-end, #race-replace').count(),0);
+    assert.equal(await page.locator('#race-start').isVisible(),true);
+    assert.equal(await page.locator('#race-goal').isVisible(),true);
+    await page.getByRole('button',{name:'Czy mój czas jest realny?',exact:true}).click();
+    assert.match(await page.locator('#coach-message').inputValue(),/całą dostępną historię/);
+    assert.equal(page.observedRequests.some(url=>url.endsWith('/coach/chat')),false);
+    await page.locator('#coach-send').click();
+    await page.locator('#coach-chat-status').filter({hasText:'Odpowiedź zapisana'}).waitFor();
+});
+
+test('planner confirms selected Sheets goal explicitly, then generates from chosen preparation start',async t=>{
+    await fetch(`${origin}/__test__/add-a-goal`,{method:'POST'});
+    const page=await openDashboard(t); await unlockChat(page);
+    await page.locator('#race-goal option').nth(1).waitFor({state:'attached'});
+    await page.locator('#race-goal').selectOption({index:1});
+    const readGoal=async()=> (await page.request.get(`${origin}/coach/profile`,{headers:{Authorization:'Bearer fixture-private-chat-code'}})).json();
+    assert.equal((await readGoal()).goal.date,'2026-12-13');
+    await page.locator('#race-goal-confirm').click();
+    await page.locator('#race-status').filter({hasText:'Cel potwierdzony'}).waitFor();
+    assert.equal((await readGoal()).goal.date,'2027-03-21');
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
+    await page.locator('#race-start').fill('2026-12-01');
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-outcome-title').filter({hasText:'Propozycja planu gotowa'}).waitFor();
+    assert.match(await page.locator('#race-coaching').textContent(),/Półmaraton A/);
+    assert.match(await page.locator('#race-summary').textContent(),/2026-12-01/);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
+});
+
+test('later B race is previewed as a version of the same preparation and saves only on acceptance', async t=>{
+    const page=await openDashboard(t); await prepareRacePlan(page);
+    await page.locator('#race-accept').click();
+    await page.locator('#race-status').filter({hasText:'Plan zapisany i potwierdzony'}).waitFor();
+    const readCurrent=async()=> (await page.request.get(`${origin}/coach/plan-reviews/current`,{headers:{Authorization:'Bearer fixture-private-chat-code'}})).json();
+    const original=await readCurrent();
+    await fetch(`${origin}/__test__/add-b-race`,{method:'POST'});
+    await fetch(`${origin}/__test__/allow-next-planning-attempt`,{method:'POST'});
+    await page.getByText('Kalendarz i starty po drodze',{exact:true}).click();
+    await page.locator('#race-load').click();
+    await page.locator('#race-status').filter({hasText:'Kalendarz zmienił się'}).waitFor();
+    await page.locator('#race-generate button[type=submit]').click();
+    await page.locator('#race-outcome-title').filter({hasText:'Propozycja planu gotowa'}).waitFor();
+    assert.match(await page.locator('#race-entries').textContent(),/Sprawdzian B/);
+    assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,1);
+    await page.locator('#race-accept').click();
+    await page.locator('#race-status').filter({hasText:'Plan zapisany i potwierdzony'}).waitFor();
+    const updated=await readCurrent();
+    assert.equal(updated.campaign_id,original.campaign_id);
+    assert.notEqual(updated.head_id,original.head_id);
+    assert.equal(updated.start,original.start);
 });

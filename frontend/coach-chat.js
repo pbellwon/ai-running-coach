@@ -19,6 +19,7 @@ function renderChatContext() {
         : c.kind === 'workout' ? `Rozmawiamy o treningu z ${formatCoachDate(c.date)}.`
         : 'Kontekst: dzisiejszy trening i aktualne dane.';
     document.getElementById('coach-clear-context').hidden = c.kind === 'today';
+    document.getElementById('coach-chat-context').hidden = c.kind === 'today';
 }
 function chatControls() {
     const busy = coachChat.busy || coachChat.loading;
@@ -65,7 +66,7 @@ function renderChatMessages() {
     if (!coachChat.turns.length) {
         const empty = document.createElement('p');
         empty.className = 'muted';
-        empty.textContent = 'Zacznij od pytania. Trener pobierze aktualne dane dopiero po jego wysłaniu.';
+        empty.textContent = 'Zacznij od pytania o swoje przygotowania.';
         log.appendChild(empty);
     }
     for (const turn of coachChat.turns) {
@@ -138,7 +139,8 @@ async function openCoachChat() {
         coachChat.ready = true;
         document.getElementById('coach-chat-body').hidden = false;
         document.getElementById('coach-unlock-form').hidden = true;
-        chatStatus('Rozmowa jest prywatna. Pytanie nie zmienia planu ani zapisanych ocen.');
+        document.dispatchEvent(new Event('coach-access-opened'));
+        chatStatus('');
     } catch (error) {
         chatStatus(error.message || 'Nie można wczytać rozmowy. Spróbuj ponownie.');
     } finally {

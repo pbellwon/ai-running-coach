@@ -60,11 +60,11 @@ def recovery_days(event):
 
 class RacePlanEngine:
     """Apply an evidence-based ten-day microcycle to the calendar, preserving audit data."""
-    def build(self, snapshot, events, strategy, start, end, replace, protected_rows, today, limits, goal=None):
+    def build(self, snapshot, events, strategy, start, end, replace, protected_rows, today, limits, goal=None, preparation_start=None):
         if not PLAN_COLUMNS.issubset(snapshot['headers']):
             raise ChatError(422, 'plan_import nie ma wymaganych dotychczasowych kolumn.')
-        if start <= today or end < start or (end-start).days > 365 or (start-today).days > 30:
-            raise ChatError(422, 'Początek musi być od jutra do 30 dni naprzód; plan może obejmować najwyżej 366 dni.')
+        if start <= today or end < start or (end-start).days > 365 or (start-today).days > 365:
+            raise ChatError(422, 'Wybierz przyszły początek w ciągu roku; plan może obejmować najwyżej 366 dni.')
         selected = [e for e in events if start.isoformat() <= e['date'] <= end.isoformat()]
         if not any(e['priority'] == 'A' for e in selected):
             raise ChatError(422, 'W okresie planu musi być przynajmniej jeden start główny A.')
@@ -86,7 +86,7 @@ class RacePlanEngine:
                 distance = sum(number(r['planned_distance_km'] or 0) for _, r in old)
                 if not any(self._type(r) == 'race' for _, r in old) or abs(distance-by_date[d]['distance_km']) > .2:
                     blockers.append(f'{d}: chroniony lub zachowany trening nie odpowiada zawodom. Skoryguj tę jednostkę osobno.')
-        campaign = LongTermPlan(start,end,strategy,events,limits,goal)
+        campaign = LongTermPlan(start,end,strategy,events,limits,goal,preparation_start)
         manifest = campaign.manifest()
         warnings.extend(manifest['warnings'])
         anchor = start - timedelta(days=strategy['start_offset'])
