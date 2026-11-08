@@ -50,11 +50,12 @@
         if (busy) return;
         const current = epoch;
         busy = true; controls();
-        try { await fn(); } catch (error) { if (current === epoch) { status(error.message); el('status').tabIndex = -1; el('status').focus({preventScroll:true}); el('status').scrollIntoView({block:'center'}); } }
+        try { await fn(); } catch (error) { if (current === epoch) { status(el('error').hidden ? error.message : ''); const target=el('error').hidden ? el('status') : el('error-title'); target.tabIndex = -1; target.focus({preventScroll:true}); target.scrollIntoView({block:'center'}); } }
         finally { busy = false; controls(); }
     }
     const workout = row => row ? `${row.date} — ${row.title}\nDystans: ${row.planned_distance_km || 'nie określono'} km\nCzas: ${row.planned_duration_min || 'nie określono'} min\n\n${row.description}` : 'Brak treningu.';
     function showPreview(value) {
+        el('error').hidden = true;
         preview = value; clarificationId = value.status === 'preview' && ['clarify','pause'].includes(value.coaching?.status) ? value.id : null; el('preview').hidden = false; el('coaching').replaceChildren();
         if (value.adaptation_assessment) el('coaching').append(text('h4','Korekta istniejącego planu'),text('p',value.adaptation_assessment.reason));
         const campaign = value.long_term;
@@ -135,8 +136,8 @@
         }
         await history(); controls();
     }
-    el('goal').addEventListener('change', () => { context = null; clarificationId = null; preview = null; el('preview').hidden = true; controls(); });
-    el('start').addEventListener('change', () => { preview=null; el('preview').hidden=true; controls(); });
+    el('goal').addEventListener('change', () => { context = null; clarificationId = null; preview = null; el('preview').hidden = el('error').hidden = true; controls(); });
+    el('start').addEventListener('change', () => { preview=null; el('preview').hidden=el('error').hidden=true; controls(); });
     el('goal-confirm').addEventListener('click', () => run(async () => {
         if (!profile || !calendar || !el('goal').value) return;
         const body = {version:profile.version,change:{kind:'goal',calendar_version:calendar.version,race_key:el('goal').value}}, hash=JSON.stringify(body);
@@ -151,22 +152,35 @@
     document.addEventListener('coach-access-opened', () => run(async () => { await load(); status(context?.active_plan?.calendar_changed ? 'Kalendarz zmienił się. Przygotuj aktualizację przyszłej części planu.' : ''); }));
     el('generate').addEventListener('submit', event => {
         event.preventDefault(); run(async () => {
-            preview = null; el('preview').hidden = true; el('coaching').replaceChildren(); controls();
-            status('Pobieram aktualne dane i przygotowuję propozycję…');
-            await load();
-            if (!context) throw new Error('Potwierdź wybrany cel główny przed przygotowaniem planu.');
-            const body = {plan_version: context.plan_version, calendar_version: context.calendar_version, athlete_version: context.athlete_version,
-                start: el('start').value, end: context.default_end, replace_existing: true, note: el('note').value};
-            if (context.active_plan && body.start === context.active_plan.start) body.parent_plan_id = context.active_plan.id;
-            if (clarificationId) body.clarification_id = clarificationId;
-            const hash = JSON.stringify(body);
-            if (!pending || pending.hash !== hash) pending = {hash, id: crypto.randomUUID()};
-            status('Trener analizuje historię i układa cykl 10-dniowy…');
-            showPreview(await request('/preview', {method: 'POST', body: JSON.stringify({id: pending.id, ...body})}));
-            pending = null; status(outcome(preview)[0] + '. Szczegóły poniżej.');
-            await history();
+            const current = epoch;
+            el('error').hidden = true;
+            try {
+                preview = null; el('preview').hidden = true; el('coaching').replaceChildren(); controls();
+                status('Pobieram aktualne dane i przygotowuję propozycję…');
+                await load();
+                if (!context) throw new Error('Potwierdź wybrany cel główny przed przygotowaniem planu.');
+                const body = {plan_version: context.plan_version, calendar_version: context.calendar_version, athlete_version: context.athlete_version,
+                    start: el('start').value, end: context.default_end, replace_existing: true, note: el('note').value};
+                if (context.active_plan && body.start === context.active_plan.start) body.parent_plan_id = context.active_plan.id;
+                if (clarificationId) body.clarification_id = clarificationId;
+                const hash = JSON.stringify(body);
+                if (!pending || pending.hash !== hash) pending = {hash, id: crypto.randomUUID()};
+                status('Trener analizuje historię i układa cykl 10-dniowy…');
+                showPreview(await request('/preview', {method: 'POST', body: JSON.stringify({id: pending.id, ...body})}));
+                pending = null; status(outcome(preview)[0] + '. Szczegóły poniżej.');
+                await history();
+            } catch (error) {
+                if (current === epoch && !preview) {
+                    el('error').hidden = false;
+                    el('error-message').textContent = error.message;
+                    el('error-issues').replaceChildren(...(error.issues || []).map(item => text('li',item)));
+                    el('error-reference').textContent = error.reference ? `Kod zgłoszenia: ${error.reference}. Podaj go, jeśli problem się powtórzy.` : '';
+                }
+                throw error;
+            }
         });
     });
+    el('error-retry').addEventListener('click', () => { if (!busy) el('generate').requestSubmit(); });
     for (const decision of ['accept', 'reject']) el(decision).addEventListener('click', () => run(async () => {
         if (decision === 'accept') { preview.status = 'writing'; controls(); }
         showPreview(await request(`/${preview.id}/decision`, {method: 'POST', body: JSON.stringify({decision})}));
@@ -174,6 +188,7 @@
     }));
     document.addEventListener('athlete-profile-updated', () => {
         context = null;
+        el('error').hidden = true;
         if (preview?.status === 'preview') { preview.status = 'stale'; controls(); }
         if (!busy && coachChat.ready) run(load);
     });
@@ -181,6 +196,7 @@
         epoch++; context = preview = pending = clarificationId = profile = calendar = goalPending = null;
         ['calendar', 'history', 'entries', 'weeks', 'warnings', 'blockers', 'coaching'].forEach(name => el(name).replaceChildren());
         el('preview').hidden = true; ['start', 'note'].forEach(name => { el(name).value = ''; }); el('goal').replaceChildren(); el('extra').open = false;
+        el('error').hidden = true; el('error-message').textContent = el('error-reference').textContent = ''; el('error-issues').replaceChildren();
         el('summary').textContent = ''; status('');
     });
     controls();

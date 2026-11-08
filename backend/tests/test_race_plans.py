@@ -183,6 +183,69 @@ def test_unsafe_or_invented_model_output_is_rejected(setup, invalid):
     else: model.value['days'][2]['duration_min'] = 20
     with pytest.raises(ChatError) as error: preview(svc)
     assert error.value.status == 502 and sheet.writes == 0 and svc.history()['items'] == []
+    assert model.calls == (1 if invalid == 'health' else 2)
+    assert error.value.reference and error.value.issues
+
+
+@pytest.mark.parametrize('invalid',['volume','spacing','json'])
+def test_one_repair_produces_real_preview_then_requires_separate_acceptance(setup,invalid):
+    svc,sheet,factory,model,_ = setup
+    good = strategy()
+    bad = deepcopy(good)
+    if invalid == 'volume': bad['days'][0]['distance_km'] = 90
+    if invalid == 'spacing': bad['days'][2]['offset'],bad['days'][5]['offset'] = 5,2
+    calls=[]
+    def generate(**kwargs):
+        calls.append(kwargs)
+        return ('```json\n'+json.dumps(bad)+'\n```' if invalid=='json' else json.dumps(bad)) if len(calls)==1 else json.dumps(good)
+    model.generate=generate
+    item=preview(svc)
+    assert len(calls)==2
+    repair=json.loads(calls[1]['input_text'])['repair']
+    assert repair['violations'] and repair['limits']['max_cycle_km']==45
+    assert set(calls[0]['json_schema']['properties']['evidence']['items']['enum'])=={'history','memory:1','calendar'}
+    assert calls[0]['json_schema']['$defs']['Session']['properties']['distance_km']['maximum']==15
+    assert calls[0]['json_schema']['$defs']['Session']['properties']['duration_min']['maximum']==90
+    assert item['entries'] and item['can_accept'] and item['status']=='preview'
+    assert len(svc.history()['items'])==1 and sheet.writes==0
+    with factory() as db: assert db.get(CoachChatGateDB,1).attempts==2
+    svc.decide(item['id'],True)
+    svc.decide(item['id'],True)
+    assert sheet.writes==1
+
+
+def test_provider_configuration_error_is_distinct_and_does_not_leak_credentials(setup,caplog):
+    from httpx2 import Request,Response
+    from openai import AuthenticationError
+    from app.services.coach_errors import PlanGenerationError
+    svc,sheet,_,model,_=setup
+    def generate(**kwargs):
+        raise AuthenticationError('PRIVATE_KEY_AND_RESPONSE',response=Response(401,request=Request('POST','https://api.openai.com/v1/responses')),body={})
+    model.generate=generate
+    with pytest.raises(PlanGenerationError) as error: preview(svc)
+    assert error.value.code=='configuration' and error.value.detail()['plan_generated'] is False
+    assert 'PRIVATE_KEY_AND_RESPONSE' not in str(error.value.detail())+caplog.text
+    assert error.value.reference in caplog.text
+    assert sheet.writes==0 and svc.history()['items']==[]
+
+
+@pytest.mark.parametrize('failure',['quota','lease'])
+def test_repair_cannot_bypass_paid_quota_or_lost_lease(setup,failure):
+    svc,sheet,factory,model,_=setup
+    calls=[]
+    def generate(**kwargs):
+        calls.append(kwargs)
+        with factory() as db:
+            gate=db.get(CoachChatGateDB,1)
+            if failure=='quota':gate.attempts=60
+            else:gate.lease='different-owner'
+            db.commit()
+        bad=strategy();bad['days'][0]['distance_km']=90
+        return json.dumps(bad)
+    model.generate=generate
+    with pytest.raises(ChatError) as error: preview(svc)
+    assert error.value.status == (429 if failure=='quota' else 409)
+    assert len(calls)==1 and sheet.writes==0 and svc.history()['items']==[]
 
 def test_insufficient_history_does_not_call_ai(setup):
     svc, _, _, model, athlete = setup

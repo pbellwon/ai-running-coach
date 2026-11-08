@@ -859,3 +859,4 @@ h3 {
 #race-extra textarea { width: 100%; }
 .coach-plan-tools { padding: 16px 0; border-top: 1px solid #313946; }
 .coach-plan-tools > summary { cursor: pointer; color: #b8d6ff; }
+.plan-generation-error { border-left: 3px solid #f0ad4e; padding: 12px 16px; margin: 20px 0; background: #242116; }

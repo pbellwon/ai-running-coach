@@ -1,5 +1,6 @@
 """A bounded coaching decision grounded in athlete evidence, followed by strict validation."""
 import json
+import logging
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -7,9 +8,40 @@ from sqlalchemy import case, or_
 from sqlalchemy.exc import IntegrityError
 from app.db.models import CoachChatGateDB
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field
-from app.ai.openai_client import PaceMindOpenAIClient
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from openai import AuthenticationError, PermissionDeniedError, NotFoundError, BadRequestError, RateLimitError, APITimeoutError
+from app.ai.openai_client import AIResponseError, PaceMindOpenAIClient
 from app.services.coach_chat_service import ChatError
+from app.services.coach_errors import PlanGenerationError
+
+logger = logging.getLogger(__name__)
+RULES = {
+    'format': 'Trener nie zwrócił kompletnej propozycji w wymaganym formacie.',
+    'Unknown evidence': 'Uzasadnienie powołuje się na źródło, którego nie ma w danych zawodnika.',
+    'Unresolved health constraints': 'Trener nie rozstrzygnął ograniczeń potrzebnych do ułożenia planu.',
+    'Missing clarification': 'Trener nie podał konkretnego pytania wyjaśniającego brakujące dane.',
+    'Missing history evidence': 'Propozycja nie odwołuje się do dostępnej historii treningów.',
+    'Incomplete ten-day cycle': 'Propozycja nie zawiera pełnego cyklu 10-dniowego.',
+    'Too many hard days': 'Propozycja zawiera zbyt wiele mocnych jednostek lub za mało odpoczynku.',
+    'Cycle exceeds observed load': 'Objętość cyklu przekracza obciążenie wynikające z Twojej historii.',
+    'Hard days too close across cycle boundary': 'Odstępy między mocnymi treningami są zbyt krótkie, także na granicy cykli.',
+    'Rest must be rest': 'Dzień odpoczynku zawiera zaplanowany trening.',
+    'Session exceeds observed tolerance': 'Długość jednostki przekracza limity wynikające z Twojej historii.',
+    'Invalid intervals': 'Dawka odcinków progowych nie spełnia zasad planowania.',
+    'Warm-up and cooldown do not fit': 'Czas jednostki nie mieści rozgrzewki, odcinków i schłodzenia.',
+    'Unexpected quality work': 'Spokojny trening zawiera dodatkową pracę odcinkową.',
+}
+
+
+def generation_failure(code, message, issues=(), provider=None, status=502):
+    reference = uuid4().hex[:12]
+    provider_code = getattr(provider,'code',None)
+    if provider_code not in ('invalid_api_key','model_not_found','invalid_json_schema','context_length_exceeded','insufficient_quota','rate_limit_exceeded'):
+        provider_code = None
+    # Do not log prompts, responses, athlete data or raw exception text.
+    logger.warning('pacemind_plan_failure reference=%s code=%s rules=%s provider_type=%s provider_status=%s provider_code=%s',
+        reference, code, ','.join(issues), type(provider).__name__ if provider else '-', getattr(provider, 'status_code', None), provider_code)
+    return PlanGenerationError(status, message, code, reference, [RULES[key] for key in issues])
 
 
 class Session(BaseModel):
@@ -78,26 +110,59 @@ Mocne dni (long, threshold) muszą być od siebie oddalone co najmniej 3 dni, ta
 Dla off km i min=0. Easy/long bez odcinków. Threshold ma 10 min rozgrzewki, 2..6 odcinków po 2..10 min,
 1..3 min truchtu między nimi i co najmniej 8 min schłodzenia w duration_min. Reszta to swobodny bieg.
 reason to uzasadnienie doboru bodźca, nie alternatywny trening. Evidence to istniejące identyfikatory źródeł.
+Dla reason wystarczą 1–2 krótkie zdania. Zwięźle podaj explanation; nie powtarzaj całej historii.
 Dla clarify/pause days=[] oraz pytanie o brakującą informację. Nie udawaj zapisu planu.'''
 
     def __init__(self, llm=None):
         self.llm = llm
 
-    def propose(self, context, races, note):
+    def propose(self, context, races, note, check_attempt=None):
         if not context['limits']['history_sufficient']:
             raise ChatError(422, 'Brakuje ciągłej historii biegania z ostatnich 28 dni. Omów z trenerem aktualne obciążenie i ewentualną przerwę przed generowaniem planu.')
-        client = self.llm or PaceMindOpenAIClient()
-        if self.llm is None:
-            client.client = client.client.with_options(timeout=60, max_retries=0)
         try:
-            output = client.generate(instructions=self.INSTRUCTIONS, max_output_tokens=4500,
-                input_text=json.dumps({'context': context, 'races': races, 'athlete_note': note}, ensure_ascii=False, default=str))
-            strategy = Strategy.model_validate_json(output)
-            self.validate(strategy, context, note)
-        except ChatError:
-            raise
+            client = self.llm or PaceMindOpenAIClient()
+            if self.llm is None:
+                client.client = client.client.with_options(timeout=35, max_retries=0)
         except Exception as exc:
-            raise ChatError(502, 'Nie udało się przygotować spójnej propozycji trenera. Ponów generowanie; plan nie został zmieniony.') from exc
+            raise generation_failure('configuration', 'Konfiguracja usługi trenera nie pozwala wygenerować planu. Plan nie powstał; arkusz nie został zmieniony.', provider=exc) from exc
+        payload = {'context': context, 'races': races, 'athlete_note': note}
+        schema = Strategy.model_json_schema()
+        schema['properties']['evidence']['items']['enum'] = sorted({s['id'] for s in context['sources']} | {'calendar'} | ({'athlete_note'} if note.strip() else set()))
+        schema['$defs']['Session']['properties']['distance_km']['maximum'] = min(100,context['limits']['max_session_km'])
+        schema['$defs']['Session']['properties']['duration_min']['maximum'] = min(600,context['limits']['max_session_minutes'])
+        for attempt in range(2):
+            if check_attempt:
+                check_attempt(renew=True, additional_call=attempt > 0)
+            try:
+                output = client.generate(instructions=self.INSTRUCTIONS, max_output_tokens=6000,
+                    json_schema=schema,
+                    input_text=json.dumps(payload, ensure_ascii=False, default=str))
+            except (AuthenticationError, PermissionDeniedError, NotFoundError, BadRequestError) as exc:
+                raise generation_failure('configuration', 'Usługa AI odrzuciła żądanie planu. Wymaga sprawdzenia konfiguracji modelu lub dostępu. Plan nie powstał; arkusz nie został zmieniony.', provider=exc) from exc
+            except RateLimitError as exc:
+                raise generation_failure('provider_limit', 'Usługa AI osiągnęła limit. Plan nie powstał. Spróbuj ponownie później.', provider=exc, status=503) from exc
+            except APITimeoutError as exc:
+                raise generation_failure('provider_timeout', 'Trener nie zdążył przygotować planu. Podgląd nie powstał; arkusz nie został zmieniony.', provider=exc, status=504) from exc
+            except AIResponseError as exc:
+                message = {'incomplete':'Odpowiedź trenera została przerwana przed zakończeniem.',
+                    'refusal':'Usługa AI odmówiła przygotowania odpowiedzi.',
+                    'empty':'Usługa AI zwróciła pustą odpowiedź.'}.get(exc.category,'Usługa AI nie zwróciła kompletnej odpowiedzi.')
+                raise generation_failure(exc.category, message+' Plan nie powstał; arkusz nie został zmieniony. Możesz ponowić generowanie.', provider=exc) from exc
+            except Exception as exc:
+                raise generation_failure('provider_unavailable', 'Nie udało się odebrać odpowiedzi usługi AI. Plan nie powstał; arkusz nie został zmieniony. Spróbuj ponownie później.', provider=exc, status=503) from exc
+            if check_attempt:
+                check_attempt()
+            try:
+                strategy = Strategy.model_validate_json(output)
+                self.validate(strategy, context, note)
+                break
+            except (ValidationError, ValueError) as exc:
+                issue = str(exc) if not isinstance(exc, ValidationError) and str(exc) in RULES else 'format'
+                if attempt or issue == 'Unresolved health constraints':
+                    raise generation_failure('invalid_proposal', 'Nie udało się przygotować spójnej propozycji trenera. Plan nie został wygenerowany i nie ma jeszcze podglądu. Arkusz nie został zmieniony.', [issue]) from exc
+                logger.info('pacemind_plan_repair rule=%s', issue)
+                payload['repair'] = {'previous_proposal':output, 'violations':[RULES[issue]], 'limits':context['limits'],
+                    'instruction':'Popraw propozycję, zachowując fakty i ograniczenia. Nie podnoś limitów i nie ukrywaj bólu ani braków danych. Zwróć cały poprawiony obiekt; w razie potrzeby zwróć clarify/pause z pytaniem.'}
         profile = context.get('facts', {}).get('profile', {})
         anchor = profile.get('cycle', {}).get('anchor_date')
         start = context.get('planning_start')
@@ -171,11 +236,20 @@ def planning_attempt(factory):
             raise ChatError(429, 'Trener przygotowuje odpowiedź lub osiągnięto limit prób. Spróbuj za chwilę.')
         db.commit()
     try:
-        def check(renew=False):
+        def check(renew=False, additional_call=False):
             current = datetime.now(timezone.utc).replace(tzinfo=None)
             with factory() as db:
                 live = db.query(CoachChatGateDB).filter(CoachChatGateDB.id == 1,
                     CoachChatGateDB.lease == lease, CoachChatGateDB.busy_until > current)
+                if additional_call:
+                    live = live.filter(or_(CoachChatGateDB.day != current.date().isoformat(), CoachChatGateDB.attempts < 60))
+                    changed = live.update({'day':current.date().isoformat(),
+                        'attempts':case((CoachChatGateDB.day == current.date().isoformat(),CoachChatGateDB.attempts+1),else_=1),
+                        'next_allowed_at':current+timedelta(seconds=10), 'busy_until':current+timedelta(seconds=90)}, synchronize_session=False)
+                    db.commit()
+                    if not changed:
+                        raise ChatError(429, 'Nie można teraz ponowić propozycji: limit prób lub zakończone przygotowanie. Plan nie powstał.')
+                    return
                 if renew:
                     changed = live.update({'busy_until': current+timedelta(seconds=90)})
                     db.commit()

@@ -170,7 +170,7 @@ class RacePlanService:
             except Exception:
                 athlete['limitations'].append('Oceny wykonania są niedostępne; trener ma tylko zapisy treningów i feedback.')
             check(renew=True)
-            strategy = self.coach.propose(athlete, events, request.get('note', ''))
+            strategy = self.coach.propose(athlete, events, request.get('note', ''), check_attempt=check)
             check()
             if parent and strategy['status'] == 'ready':
                 origin = date.fromisoformat(parent['plan']['campaign_anchor']) if parent['plan'].get('campaign_anchor') else date.fromisoformat(parent['plan']['long_term']['start']) - timedelta(days=parent['plan']['coaching']['start_offset'])

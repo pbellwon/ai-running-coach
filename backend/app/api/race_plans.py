@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.api.coach_chat import require_chat_access
 from app.services.coach_chat_service import ChatError
 from app.services.race_plan_service import RacePlanService
+from app.services.coach_errors import PlanGenerationError
 
 router = APIRouter(prefix='/coach/race-plans', tags=['race-plans'], dependencies=[Depends(require_chat_access)])
 
@@ -38,6 +39,8 @@ def service():
 def call(fn, *args):
     try:
         return fn(*args)
+    except PlanGenerationError as exc:
+        raise HTTPException(exc.status, exc.detail()) from exc
     except ChatError as exc:
         raise HTTPException(exc.status, exc.message) from exc
     except WorksheetNotFound as exc:
