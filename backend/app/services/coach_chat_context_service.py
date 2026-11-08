@@ -1,6 +1,7 @@
 """Bounded, fresh coaching facts. This layer never calls an LLM or writes training data."""
 from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from app.services.coach_context_service import CoachContextService
 from app.services.weekly_coach_review_service import WeeklyCoachReviewService
@@ -8,16 +9,18 @@ from app.services.weekly_review_service import WeeklyReviewService
 from app.services.workout_explanation_service import WorkoutExplanationService
 from app.services.recent_execution_review_service import RecentExecutionReviewService
 from app.integrations.google_sheets_plan_source import GoogleSheetsPlanSource
+from app.services.athlete_history_service import AthleteHistoryService
 
 
 class CoachChatContextService:
-    def __init__(self, base=None, weekly=None, plan=None, workout=None, today=None, profile=None):
+    def __init__(self, base=None, weekly=None, plan=None, workout=None, today=None, profile=None, archive=None):
         self.base = base or CoachContextService()
         self.weekly = weekly
         self.plan = plan
         self.workout = workout
-        self.today = today or date.today
+        self.today = today or (lambda: datetime.now(ZoneInfo('Europe/Warsaw')).date())
         self.profile = profile
+        self.archive = archive or AthleteHistoryService()
 
     def build(self, selection):
         today = self.today()
@@ -56,6 +59,12 @@ class CoachChatContextService:
         profile = self.profile or AthleteProfileService()
         collect("athlete_profile", "Potwierdzone ustalenia, cel i cykl zawodnika", profile.snapshot)
         collect("goal", "Aktualny cel", lambda: asdict(self.base.current_goal_service.get()))
+        collect("training_archive", "Cała zapisana historia treningów i wyniki zawodów", lambda: self.archive.build(today))
+        if 'training_archive' in facts:
+            limitations.extend(facts['training_archive']['limitations'])
+        goal = facts.get('goal', {})
+        if goal.get('target_date'):
+            facts['days_to_goal'] = (goal['target_date'] - today).days
         collect("athlete", "Rekomendacja dnia, postęp celu i pamięć zawodnika",
                 lambda: asdict(self.base.build(today)), date=today.isoformat())
         if "athlete" not in facts:

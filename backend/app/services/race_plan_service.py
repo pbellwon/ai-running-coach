@@ -14,7 +14,7 @@ from app.services.plan_correction_service import digest
 from app.services.personal_plan_context import PersonalPlanContext
 from app.services.personal_plan_coach import PersonalPlanCoach, planning_attempt
 from app.services.recent_execution_review_service import RecentExecutionReviewService
-from app.services.active_plan_service import ensure_active, set_active
+from app.services.active_plan_service import active_plan, ensure_active, set_active
 
 
 class RacePlanService:
@@ -36,10 +36,22 @@ class RacePlanService:
         selected = self._selected_goal(athlete, races)
         if selected:
             next_a = selected
+        current = None
+        try:
+            active = active_plan(self.factory)
+            if active['plan'].get('long_term', {}).get('goal') == selected:
+                current = {'id': active['head_id'], 'campaign_id': active['campaign_id'],
+                    'start': active['plan'].get('campaign_start', active['plan']['start']),
+                    'end': active['plan'].get('campaign_end', active['plan']['end']),
+                    'calendar_changed': active['plan']['calendar_version'] != digest(calendar)}
+        except ChatError as exc:
+            if exc.status != 422:
+                raise
         anchor = athlete.get('facts', {}).get('profile', {}).get('cycle', {}).get('anchor_date')
-        start = max((today+timedelta(days=1)).isoformat(), anchor or '')
+        start = current['start'] if current else max((today+timedelta(days=1)).isoformat(), anchor or '')
         return {'plan_version': digest(snapshot), 'calendar_version': digest(calendar), 'athlete_version': athlete['version'],
                 'races': future, 'cycle_days': 10, 'sources': athlete['sources'], 'limitations': athlete['limitations'],
+                'active_plan': current,
                 'default_start': start,
                 'default_end': (date.fromisoformat(next_a['date']) + timedelta(days=max(7,recovery_days(next_a)))).isoformat() if next_a else None}
 
@@ -93,6 +105,25 @@ class RacePlanService:
             raise ChatError(409, 'Plan, kalendarz lub informacje o zawodniku zmieniły się. Wczytaj aktualne dane.')
         events = parse_calendar(calendar)
         selected_goal = self._selected_goal(athlete, events)
+        parent = None
+        preparation_start = date.fromisoformat(request['start'])
+        if request.get('parent_plan_id'):
+            parent = active_plan(self.factory)
+            if parent['head_id'] != request['parent_plan_id'] or parent['plan'].get('long_term', {}).get('goal') != selected_goal:
+                raise ChatError(409, 'Plan lub cel zmienił się. Wczytaj aktualną wersję przed propozycją zmian.')
+            expected_start = parent['plan'].get('campaign_start', parent['plan']['start'])
+            if preparation_start.isoformat() != expected_start:
+                raise ChatError(422, 'Aktualizacja zachowuje początek przygotowań. Nowy początek wymaga osobnego planu.')
+            baseline = parent['plan']['after_snapshot']
+            protected.update(parent['plan'].get('protected_rows', []))
+            if baseline['source'] != snapshot['source'] or baseline['headers'] != snapshot['headers']:
+                raise ChatError(409, 'Źródło lub układ arkusza zmieniły się od zapisania planu.')
+            for index, row in enumerate(snapshot['rows'], 2):
+                old = baseline['rows'][index-2] if index-2 < len(baseline['rows']) else None
+                if old is None or any(old.get(k) != row.get(k) for k in ('date','title','description','planned_distance_km','planned_duration_min')):
+                    protected.add(index)
+            request = dict(request, start=max(preparation_start, self.now().date()+timedelta(days=1)).isoformat())
+            athlete['facts']['accepted_preparation'] = parent['plan'].get('long_term')
         if request.get('clarification_id'):
             with self.factory() as db:
                 previous = db.get(RacePlanDraftDB, request['clarification_id'])
@@ -112,8 +143,8 @@ class RacePlanService:
         athlete['planning_start'] = request['start']
         athlete['planning_end'] = request['end']
         start, end = date.fromisoformat(request['start']), date.fromisoformat(request['end'])
-        if start <= self.now().date() or end < start or (end-start).days > 365 or (start-self.now().date()).days > 30:
-            raise ChatError(422, 'Wybierz przyszły zakres do 366 dni, rozpoczynający się najwyżej 30 dni naprzód.')
+        if start <= self.now().date() or end < start or (end-preparation_start).days > 365 or (start-self.now().date()).days > 365:
+            raise ChatError(422, 'Wybierz przyszły początek w ciągu roku i okres do 366 dni obejmujący cel A.')
         if not any(e['priority'] == 'A' and start.isoformat() <= e['date'] <= end.isoformat() for e in events):
             raise ChatError(422, 'W okresie planu musi być start główny A.')
         if selected_goal and not start.isoformat() <= selected_goal['date'] <= end.isoformat():
@@ -141,9 +172,13 @@ class RacePlanService:
             check(renew=True)
             strategy = self.coach.propose(athlete, events, request.get('note', ''))
             check()
+            if parent and strategy['status'] == 'ready':
+                origin = date.fromisoformat(parent['plan']['campaign_anchor']) if parent['plan'].get('campaign_anchor') else date.fromisoformat(parent['plan']['long_term']['start']) - timedelta(days=parent['plan']['coaching']['start_offset'])
+                strategy['start_offset'] = (start-origin).days % 10
+                strategy['anchor_note'] = f'Zachowuję cykl 10-dniowy przygotowań od {origin}; aktualizacja zaczyna się od dnia {strategy["start_offset"]+1}.'
             if strategy['status'] == 'ready':
                 result = RacePlanEngine().build(snapshot, events, strategy, start, end,
-                    request['replace_existing'], protected, self.now().date(), athlete['limits'], selected_goal)
+                    request['replace_existing'], protected, self.now().date(), athlete['limits'], selected_goal, preparation_start)
             else:
                 result = {'entries': [], 'cycles': [], 'weeks': [], 'warnings': [], 'blockers': strategy['questions'],
                           'races': events, 'can_accept': False, 'cycle_days': 10}
@@ -166,6 +201,20 @@ class RacePlanService:
                        'summary': {'added': sum(e['action'] == 'add' for e in result['entries']),
                                    'replaced': sum(e['action'] == 'replace' for e in result['entries']),
                                    'kept': sum(e['action'] == 'keep' for e in result['entries'])}}
+            if parent:
+                payload.update(campaign_id=parent['campaign_id'], campaign_start=preparation_start.isoformat(), campaign_end=end.isoformat())
+                payload['protected_rows'] = sorted(protected)
+                payload['campaign_anchor'] = parent['plan'].get('campaign_anchor') or (date.fromisoformat(parent['plan']['long_term']['start'])-timedelta(days=parent['plan']['coaching']['start_offset'])).isoformat()
+                previous_cycles = [c for c in parent['plan'].get('cycles', []) if c['end'] < start.isoformat()]
+                crossing = next((c for c in parent['plan'].get('cycles', []) if c['start'] < start.isoformat() <= c['end']), None)
+                if crossing and payload['cycles']:
+                    from app.engine.race_plan_engine import number
+                    first = payload['cycles'][0]
+                    first['start'] = crossing['start']
+                    prior_km = sum(number(r.get('planned_distance_km') or 0) for r in snapshot['rows'] if crossing['start'] <= r.get('date','') < start.isoformat())
+                    first['planned_km'] = round(first['planned_km'] + prior_km, 1)
+                    first['budget_km'] = round(first['budget_km'] + prior_km, 1)
+                payload['cycles'] = previous_cycles + payload['cycles']
             with self.factory() as db:
                 record = RacePlanDraftDB(id=identifier, request_hash=request_hash, payload=json.dumps(payload),
                                         status='preview', created_at=self.now().replace(tzinfo=None))
@@ -236,6 +285,14 @@ class RacePlanService:
                 PlanReviewService(self.source,self.factory,now=self.now,athlete_context=self.athlete_context).validate_patch(payload)
             except ChatError:
                 self._finish(identifier,'stale')
+                raise
+        elif payload.get('parent_plan_id'):
+            try:
+                current = active_plan(self.factory, owner=identifier)
+                if current['head_id'] != payload['parent_plan_id'] or current['campaign_id'] != payload['campaign_id']:
+                    raise ChatError(409, 'Plan zmienił wersję po podglądzie. Przygotuj aktualną propozycję.')
+            except ChatError:
+                self._finish(identifier, 'stale')
                 raise
         try:
             self.source.write_generated_plan(snapshot, payload['after_snapshot'])

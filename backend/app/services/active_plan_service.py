@@ -14,11 +14,11 @@ def ensure_active(factory):
             except IntegrityError: db.rollback()
 
 
-def active_plan(factory):
+def active_plan(factory, owner=None):
     ensure_active(factory)
     with factory() as db:
         gate=db.get(PlanWriteGateDB,1)
-        if gate and gate.owner:
+        if gate and gate.owner and gate.owner != owner:
             raise ChatError(409,'Zapis planu czeka na potwierdzenie. Sprawdź jego wynik przed przeglądem.')
         state=db.get(ActivePlanStateDB,1)
         if not state.head_id:

@@ -106,7 +106,7 @@ def reset():
         db.query(AthleteProfileStateDB).delete()
         import json
         db.add(AthleteProfileStateDB(id=1,revision=0,
-            goal_json=json.dumps({'date':'2026-11-11','name':'10 km','distance_km':10,'priority':'A','target_time':'38:30','notes':''}),
+            goal_json=json.dumps({**race_sheet.races[0], 'distance_km':10.0}),
             cycle_json=json.dumps({'cycle_days':10,'anchor_date':None}),updated_at=datetime(2026,11,1)))
         db.query(RacePlanDraftDB).delete()
         db.query(TrainingPreferencesDB).delete()
@@ -263,7 +263,8 @@ from app.services.personal_plan_coach import PersonalPlanCoach
 
 class FixtureAthleteContext:
     def capture(self, today):
-        return {'version': 'a'*64, 'facts': {'conversations': ['Ustalono cykl 10-dniowy.'], 'memory': ['Dawna kontuzja, zakończony powrót.']},
+        profile=AthleteProfileService(today=lambda:today).snapshot()
+        return {'version': profile['version'], 'facts': {'profile':profile,'conversations': ['Ustalono cykl 10-dniowy.'], 'memory': ['Dawna kontuzja, zakończony powrót.']},
                 'sources': [{'id': 'history', 'label': 'Historia treningów'}, {'id': 'memory:1', 'label': 'Dawna kontuzja'}],
                 'limitations': ['Tylko rozmowy PaceMind'], 'limits': {'cycle_days': 10, 'max_cycle_km': 45, 'max_session_km': 15, 'max_session_minutes': 90, 'history_sufficient': True}}
 
@@ -299,6 +300,26 @@ app.dependency_overrides[race_plans.service] = lambda: RacePlanService(source=ra
 @app.post('/__test__/race-calendar-change')
 def change_race_calendar():
     race_sheet.races[0]['target_time'] = '39:00'
+    return {'ok': True}
+
+@app.post('/__test__/add-b-race')
+def add_b_race():
+    race_sheet.races.append({'date':'2026-11-28','name':'Sprawdzian B','distance_km':'5',
+        'priority':'B','target_time':'','notes':'Start kontrolny'})
+    return {'ok': True}
+
+@app.post('/__test__/add-a-goal')
+def add_a_goal():
+    race_sheet.races.append({'date':'2027-03-21','name':'Półmaraton A','distance_km':'21.1',
+        'priority':'A','target_time':'1:27:30','notes':''})
+    return {'ok': True}
+
+@app.post('/__test__/legacy-goal')
+def legacy_goal():
+    import json
+    with SessionLocal() as db:
+        db.get(AthleteProfileStateDB,1).goal_json=json.dumps({'date':'2026-11-11','name':'10 km','distance_km':10,'priority':'A','target_time':'38:30','notes':''})
+        db.commit()
     return {'ok': True}
 
 @app.get('/__test__/race-write-count')

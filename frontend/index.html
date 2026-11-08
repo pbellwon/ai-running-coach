@@ -12,7 +12,7 @@
 
     <link
         rel="stylesheet"
-        href="styles.css?v=35-2"
+        href="styles.css?v=coach-1"
     >
 </head>
 
@@ -333,9 +333,7 @@
         </div>
         <div id="view-coach" data-app-view="coach" hidden>
             <section class="card coach-chat-card" aria-labelledby="coach-chat-title">
-                <p class="section-label">COACH CHAT</p>
                 <h2 id="coach-chat-title">Rozmowa z trenerem</h2>
-                <p class="muted">Zapytaj o treningi, regenerację i przygotowania do celu.</p>
                 <form id="coach-unlock-form">
                     <label for="coach-access-code">Prywatny kod dostępu</label>
                     <div class="coach-chat-controls">
@@ -346,6 +344,33 @@
                 </form>
                 <p id="coach-chat-status" role="status" aria-live="polite"></p>
                 <div id="coach-chat-body" hidden>
+                    <section id="coach-conversation" aria-labelledby="coach-chat-title">
+                        <p>Porozmawiaj o postępach i realności swojego celu.</p>
+                    <details id="coach-conversation-history"><summary>Historia rozmów</summary>
+                    <div class="coach-chat-controls">
+                        <label for="coach-conversation-select">Historia rozmów</label>
+                        <select id="coach-conversation-select"><option value="">Nowa rozmowa</option></select>
+                        <button id="coach-new-conversation" type="button">Nowa rozmowa</button>
+                    </div>
+                    </details>
+                    <p id="coach-chat-context" class="muted">Kontekst: dzisiejszy trening i aktualne dane.</p>
+                    <button id="coach-clear-context" type="button" hidden>Wróć do dzisiejszych danych</button>
+                    <div class="coach-chat-suggestions" aria-label="Podpowiedzi pytań">
+                        <button type="button" data-question="Jak idą moje przygotowania do potwierdzonego celu?">Przygotowania do celu</button>
+                        <button type="button" data-question="Czy mój zakładany czas jest realny? Oceń całą dostępną historię, aktualne wyniki i czas do startu. Wyjaśnij, co wspiera cel i czego jeszcze brakuje.">Czy mój czas jest realny?</button>
+                        <button type="button" data-question="Czy są sygnały, że ostatnie obciążenie było zbyt duże?">Obciążenie i regeneracja</button>
+                    </div>
+                    <div id="coach-chat-messages" role="log" aria-label="Rozmowa z trenerem" aria-live="polite"></div>
+                    <form id="coach-message-form">
+                        <label for="coach-message">Twoje pytanie</label>
+                        <textarea id="coach-message" rows="3" maxlength="2000" required placeholder="Co chcesz omówić z trenerem?"></textarea>
+                        <div class="coach-chat-controls">
+                            <button id="coach-send" type="submit">Wyślij</button>
+                            <button id="coach-lock" type="button">Zamknij dostęp</button>
+                            <button id="coach-retry" type="button" hidden>Ponów pytanie</button>
+                            <button id="coach-history-retry" type="button" hidden>Wczytaj historię ponownie</button>
+                        </div>
+                    </form>
                     <details id="athlete-knowledge" class="card">
                         <summary>Co PaceMind o mnie wie</summary>
                         <p>Wspólne ustalenia dla trenera, planowania i wyjaśnień rekomendacji. Nowa informacja wymaga Twojego potwierdzenia.</p>
@@ -389,23 +414,29 @@
                         </section>
                         <details><summary>Poprzednie wersje i decyzje</summary><div id="profile-history"></div></details>
                     </details>
+                    </section>
                     <section id="race-planning" class="card">
-                        <h3>Długofalowy plan PaceMind · cykle 10-dniowe</h3>
-                        <p>Trener zaproponuje układ treningów pod Twój cel, korzystając z historii, odczuć, rozmów zapisanych w PaceMind i informacji o kontuzjach. Sprawdzisz uzasadnienie i cały plan przed akceptacją.</p>
+                        <h3>Plan pod Twój cel</h3>
+                        <p>Pełne przygotowania: etapy, cykle 10-dniowe i trening na każdy dzień. Najpierw sprawdzisz propozycję, a potem zdecydujesz o zapisie.</p>
                         <p id="race-status" role="status" aria-live="polite"></p>
                         <form id="race-generate">
-                            <label>Dopowiedz trenerowi, jeśli coś się zmieniło (opcjonalnie)
-                                <textarea id="race-note" rows="2" maxlength="2000" placeholder="Np. aktualne odczucia, powrót po przerwie albo odpowiedź na pytanie trenera"></textarea>
-                            </label>
-                            <button type="submit">Zaproponuj mój plan</button>
-                            <details><summary>Zakres planu i dane źródłowe</summary>
-                                <button id="race-load" type="button">Odśwież dane i historię planów</button>
-                                <div id="race-calendar"></div>
-                                <label>Od (domyślnie jutro) <input id="race-start" type="date"></label>
-                                <label>Do (domyślnie tydzień po najbliższym starcie A) <input id="race-end" type="date"></label>
-                                <label><input id="race-replace" type="checkbox" checked> Przebuduj niechronione przyszłe jednostki. Zaakceptowane korekty pozostają chronione.</label>
+                            <label for="race-goal">Cel główny z kalendarza startów</label>
+                            <select id="race-goal" required><option value="">Wczytywanie celów…</option></select>
+                            <p id="race-goal-help" class="muted"></p>
+                            <button id="race-goal-confirm" type="button" hidden>Potwierdzam ten cel główny</button>
+                            <label for="race-start">Początek okresu przygotowawczego</label>
+                            <input id="race-start" type="date" required>
+                            <button type="submit">Przygotuj propozycję planu</button>
+                            <details id="race-extra"><summary>Dodatkowa informacja lub odpowiedź dla trenera</summary>
+                                <label for="race-note">Dopowiedz trenerowi</label>
+                                <textarea id="race-note" rows="2" maxlength="2000" placeholder="Np. powrót po przerwie albo odpowiedź na pytanie trenera"></textarea>
                             </details>
                         </form>
+                        <details><summary>Kalendarz i starty po drodze</summary>
+                            <p>Nie musisz znać wszystkich startów z góry. Dodaj nowy start B lub C do race_calendar w Google Sheets, odśwież kalendarz i poproś o aktualizację planu. Zmiany sprawdzisz przed akceptacją; cel A i wykonane treningi pozostaną zachowane.</p>
+                            <button id="race-load" type="button">Odśwież kalendarz</button>
+                            <div id="race-calendar"></div>
+                        </details>
                         <div id="race-preview" hidden>
                             <h4 id="race-outcome-title">Wynik analizy planu</h4>
                             <p id="race-outcome" role="status" aria-live="polite"></p>
@@ -419,9 +450,8 @@
                             <button id="race-reject" type="button">Odrzuć tę wersję</button>
                         </div>
                         <details><summary>Historia wersji planu</summary><div id="race-history"></div></details>
-                    </section>
-                    <section id="plan-review" class="card">
-                        <h3>Przegląd wykonania i korekta dalszego planu</h3>
+                                        <details id="plan-review" class="coach-plan-tools">
+                        <summary>Sprawdź wykonanie i skoryguj dalszy plan</summary>
                         <p>Oceń ostatni cykl na tle zaakceptowanego planu. Korekta zachowa cel A i historię tej samej drogi przygotowań.</p>
                         <button id="review-run" type="button">Oceń wykonanie i dalszy plan</button>
                         <p id="review-status" role="status" aria-live="polite"></p>
@@ -443,9 +473,9 @@
                         </div>
                         <details><summary>Historia przeglądów</summary><button id="review-history-load" type="button">Wczytaj historię przeglądów</button><div id="review-history"></div></details>
                         <p>Wersje zaakceptowanych korekt są także w historii planów powyżej.</p>
-                    </section>
-                    <section id="plan-corrections" class="card">
-                        <h3>Korekta istniejącego treningu</h3>
+                    </details>
+                    <details id="plan-corrections" class="coach-plan-tools">
+                        <summary>Zmień pojedynczy trening</summary>
                         <p>Wczytaj plan, przygotuj konkretną zmianę i sprawdź podgląd. Zapis nastąpi dopiero po Twojej akceptacji.</p>
                         <button id="corrections-load" type="button">Wczytaj aktualny plan i historię korekt</button>
                         <p id="corrections-status" role="status" aria-live="polite"></p>
@@ -469,39 +499,17 @@
                             <button id="corrections-reject" type="button">Odrzuć zmianę</button>
                         </div>
                         <details><summary>Oryginały i historia korekt</summary><div id="corrections-history"></div></details>
+                    </details>
                     </section>
-                    <div class="coach-chat-controls">
-                        <label for="coach-conversation-select">Historia rozmów</label>
-                        <select id="coach-conversation-select"><option value="">Nowa rozmowa</option></select>
-                        <button id="coach-new-conversation" type="button">Nowa rozmowa</button>
-                        <button id="coach-lock" type="button">Zamknij dostęp</button>
-                    </div>
-                    <p id="coach-chat-context" class="muted">Kontekst: dzisiejszy trening i aktualne dane.</p>
-                    <button id="coach-clear-context" type="button" hidden>Wróć do dzisiejszych danych</button>
-                    <div class="coach-chat-suggestions" aria-label="Podpowiedzi pytań">
-                        <button type="button" data-question="Dlaczego taka rekomendacja na dziś?">Dzisiejsza rekomendacja</button>
-                        <button type="button" data-question="Jak ostatnie treningi wspierają mój cel na 10 km?">Przygotowania do celu</button>
-                        <button type="button" data-question="Czy są sygnały, że ostatnie obciążenie było zbyt duże?">Obciążenie i regeneracja</button>
-                    </div>
-                    <div id="coach-chat-messages" role="log" aria-label="Rozmowa z trenerem" aria-live="polite"></div>
-                    <form id="coach-message-form">
-                        <label for="coach-message">Twoje pytanie</label>
-                        <textarea id="coach-message" rows="3" maxlength="2000" required placeholder="Co chcesz omówić z trenerem?"></textarea>
-                        <div class="coach-chat-controls">
-                            <button id="coach-send" type="submit">Wyślij</button>
-                            <button id="coach-retry" type="button" hidden>Ponów pytanie</button>
-                            <button id="coach-history-retry" type="button" hidden>Wczytaj historię ponownie</button>
-                        </div>
-                    </form>
                 </div>
             </section>
         </div>
     </main>
 
     <script src="app-navigation.js?v=2"></script>
-    <script src="coach-chat.js?v=6"></script>
+    <script src="coach-chat.js?v=7"></script>
     <script src="athlete-profile.js?v=1"></script>
-    <script src="race-plans.js?v=7"></script>
+    <script src="race-plans.js?v=8"></script>
     <script src="plan-corrections.js?v=1"></script>
     <script src="plan-review.js?v=1"></script>
     <script src="app.js?v=8"></script>

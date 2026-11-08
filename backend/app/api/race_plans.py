@@ -21,6 +21,7 @@ class PreviewRequest(BaseModel):
     athlete_version: str = Field(min_length=64, max_length=64)
     note: str = Field(default='', max_length=2000)
     clarification_id: UUID | None = None
+    parent_plan_id: UUID | None = None
     start: date
     end: date
     replace_existing: bool = False

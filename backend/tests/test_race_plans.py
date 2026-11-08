@@ -325,6 +325,83 @@ def test_clarification_answer_preserves_question_and_current_dates(setup):
     assert answer['entries'] and answer['can_accept'] and sheet.writes==0
 
 
+def accept_campaign(setup):
+    svc, sheet, _, _, athlete = setup
+    goal = parse_calendar(sheet.calendar)[0]
+    capture = athlete.capture
+    def with_goal(today):
+        value = capture(today)
+        value['facts']['profile'] = {'goal': goal, 'cycle': {'cycle_days':10, 'anchor_date':None}}
+        return value
+    athlete.capture = with_goal
+    root = preview(svc)
+    svc.decide(root['id'], True)
+    return root
+
+
+def test_later_b_and_c_races_update_same_campaign_preserving_past_manual_notes_and_anchor(setup):
+    from app.services.active_plan_service import active_plan
+    svc, sheet, _, _, _ = setup
+    root = accept_campaign(setup)
+    svc.now = lambda: datetime(2026, 11, 15, 12)
+    past = deepcopy([r for r in sheet.plan['rows'] if r['date'] <= '2026-11-15'])
+    manual = next(r for r in sheet.plan['rows'] if r['date'] == '2026-11-17')
+    manual['title'] = 'Ręczna uwaga i własny trening'
+    original_manual = deepcopy(manual)
+    sheet.calendar['rows'] += [calendar_row('2026-11-28', name='Sprawdzian B', priority='B', distance_km='5', target_time=''),
+                               calendar_row('2026-12-04', name='Start C', priority='C', distance_km='5', target_time='')]
+    context = svc.context()
+    assert context['active_plan']['calendar_changed']
+    assert context['default_start'] == root['start']
+    item = preview(svc, start=root['start'], parent_plan_id=root['id'])
+    assert item['campaign_id'] == root['id'] and item['parent_plan_id'] == root['id']
+    assert item['start'] == '2026-11-16'
+    assert item['long_term']['phases'] == root['long_term']['phases']
+    assert item['coaching']['start_offset'] == 4
+    from app.db.models import RacePlanDraftDB
+    with svc.factory() as db:
+        stored = json.loads(db.get(RacePlanDraftDB,item['id']).payload)
+    assert [r for r in stored['after_snapshot']['rows'] if r['date'] <= '2026-11-15'] == past
+    assert next(r for r in stored['after_snapshot']['rows'] if r['date']=='2026-11-17') == original_manual
+    for day in ('2026-11-28', '2026-12-04'):
+        assert 'Zawody' in next(e['after']['title'] for e in item['entries'] if e['after']['date'] == day)
+    assert sheet.writes == 1  # No write during review.
+    assert svc.decide(item['id'], True)['status'] == 'applied'
+    assert svc.decide(item['id'], True)['status'] == 'applied'
+    assert sheet.writes == 2
+    assert active_plan(svc.factory)['campaign_id'] == root['id']
+    # A second update keeps the original anchor rather than shifting it by the last offset.
+    svc.now = lambda: datetime(2026, 11, 18, 12)
+    second = preview(svc, start=root['start'], parent_plan_id=item['id'])
+    assert second['coaching']['start_offset'] == 7
+    assert second['campaign_anchor'] == '2026-11-02'
+    # The same manual edit must remain protected even after it became part of a snapshot.
+    future = next(r for r in sheet.plan['rows'] if r['date']=='2026-11-24')
+    future['title'] = 'Drugi ręcznie ustalony trening'
+    revised = preview(svc, start=root['start'], parent_plan_id=item['id'])
+    svc.decide(revised['id'],True)
+    another = preview(svc, start=root['start'], parent_plan_id=revised['id'])
+    assert next(e for e in another['entries'] if e['after']['date']=='2026-11-24')['action'] == 'keep'
+
+
+def test_update_cannot_write_if_active_version_changes_even_with_identical_sheet(setup):
+    from app.db.models import ActivePlanStateDB, RacePlanDraftDB
+    svc, _, factory, _, _ = setup
+    root = accept_campaign(setup)
+    item = preview(svc, parent_plan_id=root['id'])
+    with factory() as db:
+        replacement = str(uuid4())
+        payload = json.loads(db.get(RacePlanDraftDB,root['id']).payload)
+        payload['id'] = replacement
+        db.add(RacePlanDraftDB(id=replacement,request_hash='new-head',payload=json.dumps(payload),status='applied',created_at=datetime(2026,11,1)))
+        db.get(ActivePlanStateDB,1).head_id = replacement
+        db.commit()
+    with pytest.raises(ChatError, match='zmienił wersję'):
+        svc.decide(item['id'], True)
+    assert svc.source.writes == 1
+    assert svc.get(item['id'])['status'] == 'stale'
+
+
 def test_clarification_cannot_use_unrelated_ready_plan_or_empty_answer(setup):
     svc,_,_,model,_=setup
     first=preview(svc)
