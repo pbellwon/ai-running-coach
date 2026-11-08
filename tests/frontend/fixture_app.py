@@ -268,7 +268,8 @@ class FixtureAthleteContext:
         profile=AthleteProfileService(today=lambda:today).snapshot()
         return {'version': profile['version'], 'facts': {'profile':profile,'conversations': ['Ustalono cykl 10-dniowy.'], 'memory': ['Dawna kontuzja, zakończony powrót.']},
                 'sources': [{'id': 'history', 'label': 'Historia treningów'}, {'id': 'memory:1', 'label': 'Dawna kontuzja'}],
-                'limitations': ['Tylko rozmowy PaceMind'], 'limits': {'cycle_days': 10, 'max_cycle_km': 45, 'max_session_km': 15, 'max_session_minutes': 90, 'history_sufficient': True}}
+                'limitations': ['Tylko rozmowy PaceMind'], 'limits': {'cycle_days': 10, 'max_cycle_km': 45, 'max_session_km': 15, 'max_session_minutes': 90, 'history_sufficient': True,
+                    'strength_required':True,'max_strength_minutes':30,'observed_threshold_work_min':30}}
 
 class FixturePlanModel:
     def generate(self, **kwargs):
@@ -276,11 +277,12 @@ class FixturePlanModel:
         state['plan_model_calls'] = state.get('plan_model_calls',0)+1
         days = []
         for offset in range(10):
-            kind = {0:'easy', 2:'threshold', 4:'easy', 6:'long', 8:'easy'}.get(offset, 'off')
-            km = {'easy':6, 'threshold':8, 'long':12, 'off':0}[kind]
-            days.append({'offset':offset, 'kind':kind, 'distance_km':km, 'duration_min':km*6,
+            kind = {0:'easy', 2:'threshold', 4:'easy', 6:'long', 8:'easy',9:'strength'}.get(offset, 'off')
+            km = {'easy':6, 'threshold':8, 'long':12, 'off':0,'strength':0}[kind]
+            days.append({'offset':offset, 'kind':kind, 'distance_km':km, 'duration_min':30 if kind=='strength' else km*6,
                          'repetitions':3 if kind=='threshold' else 0, 'work_min':4 if kind=='threshold' else 0,
-                         'recovery_min':2 if kind=='threshold' else 0, 'reason':'Odstępy dobrane do reakcji na obciążenie.'})
+                         'recovery_min':2 if kind=='threshold' else 0, 'reason':'Odstępy dobrane do reakcji na obciążenie.',
+                         'strength_exercises':['Split squat 2 x 6 na stronę','Hip hinge 2 x 8','Wspięcia na palce 2 x 10','Plank boczny 2 x 20 s na stronę'] if kind=='strength' else []})
         data=json.loads(kwargs['input_text'])
         followup=data.get('context',{}).get('clarification')
         if followup:

@@ -54,7 +54,9 @@ after(async () => {
 
 async function openDashboard(t, interceptDecision) {
     const context = await browser.newContext();
+    let closing=false;
     t.after(async () => {
+        closing=true;
         for (const page of context.pages()) await page.unrouteAll({behavior:'wait'});
         await context.unrouteAll({behavior: 'wait'});
         await context.close();
@@ -62,12 +64,17 @@ async function openDashboard(t, interceptDecision) {
     // Every request to the production hostname is intercepted; no production
     // request is sent. Adaptive routes run against the actual local API/SQLite.
     await context.route(`${productionAPI}/**`, async route => {
+        try {
+        if (closing) { await route.abort(); return; }
         if (route.request().method() === 'POST' && interceptDecision
             && await interceptDecision(route)) return;
         const response = await route.fetch({
             url: `${origin}${new URL(route.request().url()).pathname}${new URL(route.request().url()).search}`,
         });
         await route.fulfill({ response });
+        } catch (error) {
+            if (!closing || !/Route is already handled|Target .*closed/.test(error.message)) throw error;
+        }
     });
     const page = await context.newPage();
     page.observedRequests = [];
@@ -686,6 +693,9 @@ test('planner confirms selected Sheets goal explicitly, then generates from chos
     await page.locator('#race-outcome-title').filter({hasText:'Propozycja planu gotowa'}).waitFor();
     assert.match(await page.locator('#race-coaching').textContent(),/Półmaraton A/);
     assert.match(await page.locator('#race-summary').textContent(),/2026-12-01/);
+    assert.match(await page.locator('#race-entries').textContent(),/Trening siłowy dla biegacza/);
+    assert.match(await page.locator('#race-entries').textContent(),/3 x (9|10|11) min threshold/);
+    assert.match(await page.locator('#race-weeks').textContent(),/Próg: min pracy.*Siła: jednostki/);
     assert.equal((await (await fetch(`${origin}/__test__/race-write-count`)).json()).count,0);
 });
 

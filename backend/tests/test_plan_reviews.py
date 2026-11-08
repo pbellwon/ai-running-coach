@@ -91,6 +91,20 @@ def test_review_is_readonly_and_uses_accepted_plan(setup):
     assert svc.history()['items'][0]['id']==review['id']
 
 
+def test_adaptation_does_not_keep_previous_threshold_minutes_for_changed_cycle(setup):
+    svc,_,factory,_,_,root=setup
+    with factory() as db:
+        record=db.get(RacePlanDraftDB,root)
+        payload=json.loads(record.payload)
+        payload['cycles'].append({'start':'2026-11-15','end':'2026-11-24','phase':'Rozwój',
+            'budget_km':60,'planned_km':60,'threshold_work_min':40,'strength_sessions':1})
+        record.payload=json.dumps(payload);db.commit()
+    _,patch=propose(svc)
+    assert patch['cycles'][1]['threshold_work_min'] is None
+    with factory() as db:
+        assert json.loads(db.get(RacePlanDraftDB,root).payload)['cycles'][1]['threshold_work_min']==40
+
+
 def test_patch_is_same_campaign_changes_only_future_window_and_preserves_notes(setup):
     svc,source,_,_,_,root=setup
     before=deepcopy(source.plan)

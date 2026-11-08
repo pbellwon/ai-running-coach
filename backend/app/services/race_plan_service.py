@@ -214,6 +214,8 @@ class RacePlanService:
                     prior_km = sum(number(r.get('planned_distance_km') or 0) for r in snapshot['rows'] if crossing['start'] <= r.get('date','') < start.isoformat())
                     first['planned_km'] = round(first['planned_km'] + prior_km, 1)
                     first['budget_km'] = round(first['budget_km'] + prior_km, 1)
+                    first['threshold_work_min'] = None
+                    first['strength_sessions'] = first.get('strength_sessions',0) + sum(RacePlanEngine._type(r)=='strength' for r in snapshot['rows'] if crossing['start']<=r.get('date','')<start.isoformat())
                 payload['cycles'] = previous_cycles + payload['cycles']
             with self.factory() as db:
                 record = RacePlanDraftDB(id=identifier, request_hash=request_hash, payload=json.dumps(payload),

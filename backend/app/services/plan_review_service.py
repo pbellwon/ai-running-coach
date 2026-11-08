@@ -174,6 +174,8 @@ class PlanReviewService:
         payload['campaign_end']=active['plan'].get('campaign_end',active['plan']['end'])
         for cycle in payload.get('cycles',[]):
             cycle['planned_km']=round(sum(number(r['planned_distance_km'] or 0) for r in after['rows'] if cycle['start']<=r.get('date','')<=cycle['end']),1)
+            if any(cycle['start']<=e['after']['date']<=cycle['end'] for e in patches):
+                cycle['threshold_work_min']=None
         with self.factory() as db:
             record=RacePlanDraftDB(id=identifier,request_hash=request_hash,payload=json.dumps(payload),status='preview',created_at=self.now().replace(tzinfo=None))
             db.add(record)
